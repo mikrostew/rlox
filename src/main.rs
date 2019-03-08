@@ -36,7 +36,7 @@ impl Lox {
     fn run_file(path: &str) {
         let script_contents =
             fs::read_to_string(path).expect(&format!("Could not read input file {}", path));
-        let lox = Lox::new();
+        let mut lox = Lox::new();
         lox.run(&script_contents);
         if lox.had_error() {
             exit(65);
@@ -73,8 +73,8 @@ impl Lox {
     }
 
     // Run the input text
-    fn run(&self, source: &str) {
-        let mut scanner = Scanner::new(source.to_string());
+    fn run(&mut self, source: &str) {
+        let mut scanner = Scanner::new(source.to_string(), self);
         let tokens = scanner.scan_tokens();
 
         // For now, just print the tokens.
@@ -84,12 +84,15 @@ impl Lox {
     }
 
     // for error handling
-    fn error(&mut self, line: u64, message: &str) {
-        self.report(line, "", message);
-    }
-
-    fn report(&mut self, line: u64, err_where: &str, message: &str) {
-        println!("[line {}] Error {}: {}", line, err_where, message);
+    fn error(&mut self, message: &str, line_num: u64, column: u64, _length: u64) {
+        // TODO:
+        // the book doesn't implement it, but given those args it should be possible to do this:
+        //
+        // Error: Unexpected "," in argument list.
+        //
+        //     15:23 | function(first, second,);
+        //                                   ^-- here
+        println!("[line {}:{}] Error: {}", line_num, column, message);
         self.had_error = true;
     }
 
@@ -100,13 +103,6 @@ impl Lox {
     fn reset_err(&mut self) {
         self.had_error = false;
     }
-
-    // TODO: the book doesn't implement it, but I would like to be able to do something like:
-    //
-    // Error: Unexpected "," in argument list.
-    //
-    //     15 | function(first, second,);
-    //                                ^-- Here.
 }
 
 // the kind of token that was scanned
@@ -156,6 +152,7 @@ enum TokenKind {
 
     // Other
     Eof,
+    Unknown(char),
 }
 
 impl fmt::Display for TokenKind {
@@ -205,6 +202,7 @@ impl fmt::Display for TokenKind {
             // TokenKind::While => "While",
             // Other
             TokenKind::Eof => "Eof",
+            TokenKind::Unknown(_) => "Unknown",
         };
         write!(f, "{}", to_write)
     }
@@ -264,7 +262,7 @@ impl fmt::Debug for Token {
     }
 }
 
-struct Scanner {
+struct Scanner<'a> {
     source: String,
     // source_chars: Option<Chars<'a>>,
     // tokens: Vec<Token>,
@@ -281,10 +279,14 @@ struct Scanner {
     line: u64,
     // current column
     column: u64,
+
+    // TODO: could I pass in something else, that only does error reporting, instead of a ref to
+    // everything?
+    lox: &'a mut Lox, // for error reporting
 }
 
-impl Scanner {
-    pub fn new(source: String) -> Self {
+impl<'a> Scanner<'a> {
+    pub fn new(source: String, lox: &'a mut Lox) -> Self {
         Scanner {
             source,
             // source_chars: None,
@@ -294,7 +296,8 @@ impl Scanner {
             lexeme_length: 0,
             current_char: 0,
             line: 1,
-            column: 1,
+            column: 0,
+            lox,
         }
     }
 
@@ -330,9 +333,15 @@ impl Scanner {
         tokens
     }
 
+    fn error(&mut self, message: &str) {
+        self.lox
+            .error(message, self.line, self.column, self.lexeme_length);
+    }
+
     fn advance(&mut self, chars: &mut Chars) -> Option<char> {
         self.current_char += 1;
         self.lexeme_length += 1;
+        self.column += 1;
         chars.next()
     }
 
@@ -349,8 +358,12 @@ impl Scanner {
             Some(';') => self.make_token(TokenKind::Semicolon),
             Some('/') => self.make_token(TokenKind::Slash),
             Some('*') => self.make_token(TokenKind::Star),
+            // TODO: reset column and increment line number for newline
             // TODO
-            Some(_) => None,
+            Some(c) => {
+                self.error(&format!("Unexpected character '{}'", c));
+                self.make_token(TokenKind::Unknown(c))
+            }
             None => None,
         }
     }
