@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -111,8 +112,9 @@ impl Lox {
     //                                ^-- Here.
 }
 
-enum TokenType {
-    // Single-character tokens.
+// the kind of token that was scanned
+enum TokenKind {
+    // Single-character tokens
     LeftParen,
     RightParen,
     LeftBrace,
@@ -125,7 +127,7 @@ enum TokenType {
     Slash,
     Star,
 
-    // One or two character tokens.
+    // One or two character tokens
     Bang,
     BangEqual,
     Equal,
@@ -135,12 +137,12 @@ enum TokenType {
     Less,
     LessEqual,
 
-    // Literals.
+    // Literals
     Identifier,
     String,
     Number,
 
-    // Keywords.
+    // Keywords
     And,
     Class,
     Else,
@@ -158,5 +160,100 @@ enum TokenType {
     Var,
     While,
 
+    // Other
     Eof,
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let to_write = match self {
+            // Single-character tokens
+            TokenKind::LeftParen => "LeftParen",
+            TokenKind::RightParen => "RightParen",
+            TokenKind::LeftBrace => "LeftBrace",
+            TokenKind::RightBrace => "RightBrace",
+            TokenKind::Comma => "Comma",
+            TokenKind::Dot => "Dot",
+            TokenKind::Minus => "Minus",
+            TokenKind::Plus => "Plus",
+            TokenKind::Semicolon => "Semicolon",
+            TokenKind::Slash => "Slash",
+            TokenKind::Star => "Star",
+            // One or two character tokens
+            TokenKind::Bang => "Bang",
+            TokenKind::BangEqual => "BangEqual",
+            TokenKind::Equal => "Equal",
+            TokenKind::EqualEqual => "EqualEqual",
+            TokenKind::Greater => "Greater",
+            TokenKind::GreaterEqual => "GreaterEqual",
+            TokenKind::Less => "Less",
+            TokenKind::LessEqual => "LessEqual",
+            // Literals
+            TokenKind::Identifier => "Identifier",
+            TokenKind::String => "String",
+            TokenKind::Number => "Number",
+            // Keywords
+            TokenKind::And => "And",
+            TokenKind::Class => "Class",
+            TokenKind::Else => "Else",
+            TokenKind::False => "False",
+            TokenKind::Fun => "Fun",
+            TokenKind::For => "For",
+            TokenKind::If => "If",
+            TokenKind::Nil => "Nil",
+            TokenKind::Or => "Or",
+            TokenKind::Print => "Print",
+            TokenKind::Return => "Return",
+            TokenKind::Super => "Super",
+            TokenKind::This => "This",
+            TokenKind::True => "True",
+            TokenKind::Var => "Var",
+            TokenKind::While => "While",
+            // Other
+            TokenKind::Eof => "Eof",
+        };
+        write!(f, "{}", to_write)
+    }
+}
+
+struct Token {
+    kind: TokenKind,
+    // the raw characters from the input
+    lexeme: String,
+    // TODO
+    // literal: how to do a generic Object? maybe optional string, int, or whatever
+    // OR, some Literal<> that holds a specific one? maybe...
+
+    // line number where the token appears
+    line: u64,
+    // column where the token starts
+    column: u64,
+    // length of the token
+    length: u64,
+}
+
+impl Token {
+    pub fn new(
+        kind: TokenKind,
+        lexeme: String,
+        /* literal,*/ line: u64,
+        column: u64,
+        length: u64,
+    ) -> Self {
+        Token {
+            kind,
+            lexeme,
+            // TODO: literal,
+            line,
+            column,
+            length,
+        }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO: include the literal?
+        write!(f, "{} {}", self.kind, self.lexeme /*, self.literal*/)
+    }
 }
