@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::io::Write;
+use std::iter::Peekable;
 use std::process::exit;
 use std::str::Chars;
 
@@ -106,6 +107,7 @@ impl Lox {
 }
 
 // the kind of token that was scanned
+#[derive(PartialEq)]
 enum TokenKind {
     // Single-character tokens
     LeftParen,
@@ -119,15 +121,15 @@ enum TokenKind {
     Semicolon,
     Slash,
     Star,
-    // // One or two character tokens
-    // Bang,
-    // BangEqual,
-    // Equal,
-    // EqualEqual,
-    // Greater,
-    // GreaterEqual,
-    // Less,
-    // LessEqual,
+    // One or two character tokens
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     // // Literals
     // Identifier,
     // String,
@@ -152,7 +154,9 @@ enum TokenKind {
 
     // Other
     Eof,
-    Unknown(char),
+
+    // Tokens that will be ignored (comments, unknown chars)
+    Ignore,
 }
 
 impl fmt::Display for TokenKind {
@@ -170,15 +174,15 @@ impl fmt::Display for TokenKind {
             TokenKind::Semicolon => "Semicolon",
             TokenKind::Slash => "Slash",
             TokenKind::Star => "Star",
-            // // One or two character tokens
-            // TokenKind::Bang => "Bang",
-            // TokenKind::BangEqual => "BangEqual",
-            // TokenKind::Equal => "Equal",
-            // TokenKind::EqualEqual => "EqualEqual",
-            // TokenKind::Greater => "Greater",
-            // TokenKind::GreaterEqual => "GreaterEqual",
-            // TokenKind::Less => "Less",
-            // TokenKind::LessEqual => "LessEqual",
+            // One or two character tokens
+            TokenKind::Bang => "Bang",
+            TokenKind::BangEqual => "BangEqual",
+            TokenKind::Equal => "Equal",
+            TokenKind::EqualEqual => "EqualEqual",
+            TokenKind::Greater => "Greater",
+            TokenKind::GreaterEqual => "GreaterEqual",
+            TokenKind::Less => "Less",
+            TokenKind::LessEqual => "LessEqual",
             // // Literals
             // TokenKind::Identifier => "Identifier",
             // TokenKind::String => "String",
@@ -202,7 +206,7 @@ impl fmt::Display for TokenKind {
             // TokenKind::While => "While",
             // Other
             TokenKind::Eof => "Eof",
-            TokenKind::Unknown(_) => "Unknown",
+            TokenKind::Ignore => "",
         };
         write!(f, "{}", to_write)
     }
@@ -241,6 +245,10 @@ impl Token {
             column,
             length,
         }
+    }
+
+    pub fn can_ignore(&self) -> bool {
+        self.kind == TokenKind::Ignore
     }
 }
 
@@ -304,7 +312,7 @@ impl<'a> Scanner<'a> {
     fn scan_tokens(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         let source = self.source.clone();
-        let mut chars = source.chars();
+        let mut chars = source.chars().peekable();
 
         // scan tokens until EOF is reached
         loop {
@@ -316,7 +324,12 @@ impl<'a> Scanner<'a> {
             let current_token = self.scan_token(&mut chars);
 
             match current_token {
-                Some(token) => tokens.push(token),
+                // TODO: ignore some tokens - comment
+                Some(token) => {
+                    if !token.can_ignore() {
+                        tokens.push(token)
+                    }
+                }
                 // no more tokens, at EOF
                 None => break,
             }
@@ -338,15 +351,34 @@ impl<'a> Scanner<'a> {
             .error(message, self.line, self.column, self.lexeme_length);
     }
 
-    fn advance(&mut self, chars: &mut Chars) -> Option<char> {
+    fn advance(&mut self, chars: &mut Peekable<Chars>) -> Option<char> {
         self.current_char += 1;
         self.lexeme_length += 1;
         self.column += 1;
         chars.next()
     }
 
-    fn scan_token(&mut self, chars: &mut Chars) -> Option<Token> {
+    // if the next character matches the char_to_match, consume it and return true
+    fn match_next(&mut self, char_to_match: char, chars: &mut Peekable<Chars>) -> bool {
+        match chars.peek() {
+            Some(&c) => {
+                // if the next character matches, consume it and advance things accordingly
+                if c == char_to_match {
+                    self.advance(chars);
+                    true
+                } else {
+                    // if not, don't consume the char
+                    false
+                }
+            }
+            // if there's nothing left, it doesn't match of course
+            None => false,
+        }
+    }
+
+    fn scan_token(&mut self, chars: &mut Peekable<Chars>) -> Option<Token> {
         match self.advance(chars) {
+            // just single characters
             Some('(') => self.make_token(TokenKind::LeftParen),
             Some(')') => self.make_token(TokenKind::RightParen),
             Some('{') => self.make_token(TokenKind::LeftBrace),
@@ -356,13 +388,64 @@ impl<'a> Scanner<'a> {
             Some('-') => self.make_token(TokenKind::Minus),
             Some('+') => self.make_token(TokenKind::Plus),
             Some(';') => self.make_token(TokenKind::Semicolon),
-            Some('/') => self.make_token(TokenKind::Slash),
             Some('*') => self.make_token(TokenKind::Star),
+
+            // these can be one or two characters
+            Some('!') => {
+                let kind = if self.match_next('=', chars) {
+                    TokenKind::BangEqual
+                } else {
+                    TokenKind::Bang
+                };
+                self.make_token(kind)
+            }
+            Some('=') => {
+                let kind = if self.match_next('=', chars) {
+                    TokenKind::EqualEqual
+                } else {
+                    TokenKind::Equal
+                };
+                self.make_token(kind)
+            }
+            Some('<') => {
+                let kind = if self.match_next('=', chars) {
+                    TokenKind::LessEqual
+                } else {
+                    TokenKind::Less
+                };
+                self.make_token(kind)
+            }
+            Some('>') => {
+                let kind = if self.match_next('=', chars) {
+                    TokenKind::GreaterEqual
+                } else {
+                    TokenKind::Greater
+                };
+                self.make_token(kind)
+            }
+
+            // TODO: this can be '/', or '// comment'
+            Some('/') => {
+                if self.match_next('/', chars) {
+                    // comment goes to the end of the line (or end of string)
+                    loop {
+                        println!("current char: {:?}", chars.peek());
+                        match chars.peek() {
+                            Some(&'\n') => break,
+                            Some(_) => self.advance(chars),
+                            None => break,
+                        };
+                    }
+                    self.make_token(TokenKind::Ignore)
+                } else {
+                    self.make_token(TokenKind::Slash)
+                }
+            }
             // TODO: reset column and increment line number for newline
             // TODO
             Some(c) => {
                 self.error(&format!("Unexpected character '{}'", c));
-                self.make_token(TokenKind::Unknown(c))
+                self.make_token(TokenKind::Ignore)
             }
             None => None,
         }
