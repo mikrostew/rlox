@@ -488,19 +488,49 @@ impl Scanner {
                 self.make_token(kind, lexeme, sp)
             }
 
-            // this can be '/', or '// comment'
-            // TODO: handle /* ... */ style comments
+            // this can be '/', or '// comment', or '/* ... */'
             Some('/') => {
+                // '// comment' style comments
                 if self.match_next('/', chars, sp) {
                     // comment goes to the end of the line (or end of string)
                     loop {
                         match chars.peek() {
                             Some(&'\n') => break,
                             Some(_) => self.advance(chars, sp),
-                            None => break,
+                            None => break, // got to the end of file, OK
                         };
                     }
                     self.make_token(TokenKind::Ignore, "", sp)
+                // '/* ... */' style comments
+                } else if self.match_next('*', chars, sp) {
+                    // comment goes to the end of the line (or end of string)
+                    loop {
+                        match chars.peek() {
+                            Some(&'*') => {
+                                // check for the end of the comment block
+                                self.advance(chars, sp);
+                                if chars.peek() == Some(&'/') {
+                                    self.advance(chars, sp);
+                                    break;
+                                }
+                            }
+                            Some(_) => {
+                                self.advance(chars, sp);
+                            }
+                            None => {
+                                // report and return error (no token created)
+                                let report_string = self.err_reporter.report(
+                                    "Unterminated block comment",
+                                    sp.line,
+                                    sp.column,
+                                    1,
+                                );
+                                return Err(report_string);
+                            }
+                        };
+                    }
+                    self.make_token(TokenKind::Ignore, "", sp)
+                // just a slash
                 } else {
                     self.make_token(TokenKind::Slash, "/", sp)
                 }
@@ -528,7 +558,7 @@ impl Scanner {
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
-                    &format!("Unexpected character '{}'", c),
+                    &format!("Unexpected character `{}`", c),
                     sp.line,
                     sp.column,
                     1, // length of single char is 1
@@ -616,12 +646,12 @@ impl Scanner {
                                     }
                                     // if it's anything else, just return the token, finally
                                     _ => {
-                                        // TODO: parse the number
+                                        // parse the number
                                         let parsed_float = match f64::from_str(&digit_string) {
                                             Ok(f) => f,
                                             Err(e) => {
                                                 return Err(format!(
-                                                    "Could not parse float: {}",
+                                                    "Could not parse number: {}",
                                                     e.to_string()
                                                 ));
                                             }
@@ -658,16 +688,16 @@ impl Scanner {
                         }
                     }
                 }
-                // anything else
-                Some(c) => {
-                    // report and return error (no token created)
-                    let report_string = self.err_reporter.report(
-                        &format!("Expected digit or decimal, found '{}'", c),
-                        sp.line,
-                        sp.column,
-                        1,
-                    );
-                    return Err(report_string);
+                // anything else ends the number
+                Some(_) => {
+                    // parse the number
+                    let parsed_float = match f64::from_str(&digit_string) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            return Err(format!("Could not parse number: {}", e.to_string()));
+                        }
+                    };
+                    return self.make_token(TokenKind::Number(parsed_float), &digit_string, sp);
                 }
                 None => return Ok(None),
             }
