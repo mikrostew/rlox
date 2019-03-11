@@ -6,6 +6,7 @@ use std::io::Write;
 use std::iter::Peekable;
 use std::process::exit;
 use std::str::Chars;
+use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -160,7 +161,7 @@ enum TokenKind {
     // // Literals
     // Identifier,
     String(String),
-    // Number,
+    Number(f64),
     // // Keywords
     // And,
     // Class,
@@ -219,7 +220,10 @@ impl fmt::Display for TokenKind {
                 format = format!("String({})", s);
                 &format
             }
-            // TokenKind::Number => "Number",
+            TokenKind::Number(n) => {
+                format = format!("Number({})", n);
+                &format
+            }
             // // Keywords
             // TokenKind::And => "And",
             // TokenKind::Class => "Class",
@@ -421,7 +425,8 @@ impl Scanner {
         chars: &mut Peekable<Chars>,
         sp: &mut ScanPosition,
     ) -> Result<Option<Token>, String> {
-        match self.advance(chars, sp) {
+        let current_char = self.advance(chars, sp);
+        match current_char {
             // single characters
             Some('(') => self.make_token(TokenKind::LeftParen, "(", sp),
             Some(')') => self.make_token(TokenKind::RightParen, ")", sp),
@@ -496,6 +501,9 @@ impl Scanner {
             // string literals
             Some('"') => self.handle_string(chars, sp),
 
+            // number literals
+            Some('0'..='9') => self.handle_number(current_char.unwrap(), chars, sp),
+
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
@@ -546,6 +554,102 @@ impl Scanner {
                     return Err(report_string);
                 }
             };
+        }
+    }
+
+    fn handle_number(
+        &self,
+        digit: char,
+        chars: &mut Peekable<Chars>,
+        sp: &mut ScanPosition,
+    ) -> Result<Option<Token>, String> {
+        let mut digit_string = String::new();
+        digit_string.push(digit);
+
+        loop {
+            let peeked = chars.peek();
+            match peeked {
+                // if if's a digit, push onto the string
+                Some('0'..='9') => {
+                    digit_string.push(*peeked.unwrap());
+                    self.advance(chars, sp);
+                }
+                // if it's a decimal, only add if it's followed by another digit
+                Some('.') => {
+                    // TODO: to add methods to numbers, this will have to change
+                    digit_string.push('.');
+                    self.advance(chars, sp);
+                    let peek_next = chars.peek();
+                    match peek_next {
+                        Some('0'..='9') => {
+                            digit_string.push(*peek_next.unwrap());
+                            self.advance(chars, sp);
+
+                            loop {
+                                // if there are any more digits, consume them
+                                let peeked = chars.peek();
+                                match peeked {
+                                    Some('0'..='9') => {
+                                        digit_string.push(*peeked.unwrap());
+                                        self.advance(chars, sp);
+                                    }
+                                    // if it's anything else, just return the token, finally
+                                    _ => {
+                                        // TODO: parse the number
+                                        let parsed_float = match f64::from_str(&digit_string) {
+                                            Ok(f) => f,
+                                            Err(e) => {
+                                                return Err(format!(
+                                                    "Could not parse float: {}",
+                                                    e.to_string()
+                                                ));
+                                            }
+                                        };
+                                        return self.make_token(
+                                            TokenKind::Number(parsed_float),
+                                            &digit_string,
+                                            sp,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        // anything other than a decimal is an error
+                        Some(c) => {
+                            // report and return error (no token created)
+                            let report_string = self.err_reporter.report(
+                                &format!("Expected digit after decimal, found {}", c),
+                                sp.line,
+                                sp.column,
+                                1,
+                            );
+                            return Err(report_string);
+                        }
+                        None => {
+                            // report and return error (no token created)
+                            let report_string = self.err_reporter.report(
+                                "Expected digit after decimal, found EOF",
+                                sp.line,
+                                sp.column,
+                                1,
+                            );
+                            return Err(report_string);
+                        }
+                    }
+                }
+                // anything else
+                Some(c) => {
+                    // report and return error (no token created)
+                    let report_string = self.err_reporter.report(
+                        &format!("Expected digit or decimal, found '{}'", c),
+                        sp.line,
+                        sp.column,
+                        1,
+                    );
+                    return Err(report_string);
+                }
+                None => return Ok(None),
+            }
         }
     }
 
