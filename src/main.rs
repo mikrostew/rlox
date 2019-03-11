@@ -158,31 +158,29 @@ enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
-    // // Literals
-    // Identifier,
+    // Literals
+    Identifier(String),
     String(String),
     Number(f64),
-    // // Keywords
-    // And,
-    // Class,
-    // Else,
-    // False,
-    // Fun,
-    // For,
-    // If,
-    // Nil,
-    // Or,
-    // Print,
-    // Return,
-    // Super,
-    // This,
-    // True,
-    // Var,
-    // While,
-
+    // Keywords
+    And,
+    Class,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
     // Other
     Eof,
-
     // Tokens that will be ignored (comments, unknown chars)
     Ignore,
 }
@@ -214,8 +212,11 @@ impl fmt::Display for TokenKind {
             TokenKind::GreaterEqual => "GreaterEqual",
             TokenKind::Less => "Less",
             TokenKind::LessEqual => "LessEqual",
-            // // Literals
-            // TokenKind::Identifier => "Identifier",
+            // Literals
+            TokenKind::Identifier(s) => {
+                format = format!("Identifier({})", s);
+                &format
+            }
             TokenKind::String(s) => {
                 format = format!("String({})", s);
                 &format
@@ -224,23 +225,23 @@ impl fmt::Display for TokenKind {
                 format = format!("Number({})", n);
                 &format
             }
-            // // Keywords
-            // TokenKind::And => "And",
-            // TokenKind::Class => "Class",
-            // TokenKind::Else => "Else",
-            // TokenKind::False => "False",
-            // TokenKind::Fun => "Fun",
-            // TokenKind::For => "For",
-            // TokenKind::If => "If",
-            // TokenKind::Nil => "Nil",
-            // TokenKind::Or => "Or",
-            // TokenKind::Print => "Print",
-            // TokenKind::Return => "Return",
-            // TokenKind::Super => "Super",
-            // TokenKind::This => "This",
-            // TokenKind::True => "True",
-            // TokenKind::Var => "Var",
-            // TokenKind::While => "While",
+            // Keywords
+            TokenKind::And => "And",
+            TokenKind::Class => "Class",
+            TokenKind::Else => "Else",
+            TokenKind::False => "False",
+            TokenKind::Fun => "Fun",
+            TokenKind::For => "For",
+            TokenKind::If => "If",
+            TokenKind::Nil => "Nil",
+            TokenKind::Or => "Or",
+            TokenKind::Print => "Print",
+            TokenKind::Return => "Return",
+            TokenKind::Super => "Super",
+            TokenKind::This => "This",
+            TokenKind::True => "True",
+            TokenKind::Var => "Var",
+            TokenKind::While => "While",
             // Other
             TokenKind::Eof => "EOF",
             TokenKind::Ignore => "",
@@ -249,14 +250,35 @@ impl fmt::Display for TokenKind {
     }
 }
 
+impl TokenKind {
+    pub fn get_keyword(from_str: &str) -> Option<TokenKind> {
+        match from_str {
+            "and" => Some(TokenKind::And),
+            "class" => Some(TokenKind::Class),
+            "else" => Some(TokenKind::Else),
+            "false" => Some(TokenKind::False),
+            "fun" => Some(TokenKind::Fun),
+            "for" => Some(TokenKind::For),
+            "if" => Some(TokenKind::If),
+            "nil" => Some(TokenKind::Nil),
+            "or" => Some(TokenKind::Or),
+            "print" => Some(TokenKind::Print),
+            "return" => Some(TokenKind::Return),
+            "super" => Some(TokenKind::Super),
+            "this" => Some(TokenKind::This),
+            "true" => Some(TokenKind::True),
+            "var" => Some(TokenKind::Var),
+            "while" => Some(TokenKind::While),
+            // otherwise this is not a keyword
+            _ => None,
+        }
+    }
+}
+
 struct Token {
     kind: TokenKind,
     // the raw characters from the input
     lexeme: String,
-    // TODO
-    // literal: how to do a generic Object? maybe optional string, int, or whatever
-    // OR, some Literal<> that holds a specific one? maybe...
-
     // line and column where the token appears
     position: ScanPosition,
     // length of the token
@@ -264,7 +286,7 @@ struct Token {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: &str, /* literal,*/ sp: &ScanPosition) -> Self {
+    pub fn new(kind: TokenKind, lexeme: &str, sp: &ScanPosition) -> Self {
         let length = lexeme.len() as u64;
 
         // scan position is at the end of the scanned token, so adjust that accordingly
@@ -274,7 +296,6 @@ impl Token {
         Token {
             kind,
             lexeme: lexeme.to_string(),
-            // TODO: literal,
             position,
             length,
         }
@@ -287,22 +308,16 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: include the literal?
-        write!(f, "{} {}", self.kind, self.lexeme /*, self.literal*/)
+        write!(f, "{} {}", self.kind, self.lexeme)
     }
 }
 
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: include the literal?
         write!(
             f,
-            "{} {} line{}:col{}:len{}",
-            self.kind,
-            self.lexeme,
-            /*, self.literal*/ self.position.line,
-            self.position.column,
-            self.length
+            "{} `{}` line{}:col{}:len{}",
+            self.kind, self.lexeme, self.position.line, self.position.column, self.length
         )
     }
 }
@@ -474,6 +489,7 @@ impl Scanner {
             }
 
             // this can be '/', or '// comment'
+            // TODO: handle /* ... */ style comments
             Some('/') => {
                 if self.match_next('/', chars, sp) {
                     // comment goes to the end of the line (or end of string)
@@ -503,6 +519,11 @@ impl Scanner {
 
             // number literals
             Some('0'..='9') => self.handle_number(current_char.unwrap(), chars, sp),
+
+            // identifiers and keywords
+            Some('a'..='z') | Some('A'..='Z') | Some('_') => {
+                self.handle_identifier(current_char.unwrap(), chars, sp)
+            }
 
             Some(c) => {
                 // report and return error (no token created)
@@ -649,6 +670,41 @@ impl Scanner {
                     return Err(report_string);
                 }
                 None => return Ok(None),
+            }
+        }
+    }
+
+    fn handle_identifier(
+        &self,
+        first_char: char,
+        chars: &mut Peekable<Chars>,
+        sp: &mut ScanPosition,
+    ) -> Result<Option<Token>, String> {
+        let mut id_string = String::new();
+        id_string.push(first_char);
+
+        loop {
+            let peeked = chars.peek();
+            match peeked {
+                // if if's alphanumeric, push onto the string
+                Some('0'..='9') | Some('a'..='z') | Some('A'..='Z') | Some('_') => {
+                    id_string.push(*peeked.unwrap());
+                    self.advance(chars, sp);
+                }
+                // anything else means end of the identifier
+                _ => {
+                    // check for keywords
+                    match TokenKind::get_keyword(&id_string) {
+                        Some(token_kind) => return self.make_token(token_kind, &id_string, sp),
+                        _ => {
+                            return self.make_token(
+                                TokenKind::Identifier(id_string.clone()),
+                                &id_string,
+                                sp,
+                            );
+                        }
+                    }
+                }
             }
         }
     }
