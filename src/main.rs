@@ -159,7 +159,7 @@ enum TokenKind {
     LessEqual,
     // // Literals
     // Identifier,
-    // String,
+    String(String),
     // Number,
     // // Keywords
     // And,
@@ -188,6 +188,9 @@ enum TokenKind {
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // for things that need more formatting
+        let format;
+
         let to_write = match self {
             // Single-character tokens
             TokenKind::LeftParen => "LeftParen",
@@ -212,7 +215,10 @@ impl fmt::Display for TokenKind {
             TokenKind::LessEqual => "LessEqual",
             // // Literals
             // TokenKind::Identifier => "Identifier",
-            // TokenKind::String => "String",
+            TokenKind::String(s) => {
+                format = format!("String({})", s);
+                &format
+            }
             // TokenKind::Number => "Number",
             // // Keywords
             // TokenKind::And => "And",
@@ -487,6 +493,9 @@ impl Scanner {
                 self.make_token(TokenKind::Ignore, "", sp)
             }
 
+            // string literals
+            Some('"') => self.handle_string(chars, sp),
+
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
@@ -498,6 +507,45 @@ impl Scanner {
                 Err(report_string)
             }
             None => Ok(None),
+        }
+    }
+
+    fn handle_string(
+        &self,
+        chars: &mut Peekable<Chars>,
+        sp: &mut ScanPosition,
+    ) -> Result<Option<Token>, String> {
+        let mut string_chars = String::new();
+        loop {
+            match chars.peek() {
+                Some('"') => {
+                    self.advance(chars, sp);
+                    return self.make_token(
+                        TokenKind::String(string_chars.clone()),
+                        &format!("\"{}\"", string_chars),
+                        sp,
+                    );
+                }
+                Some(&c) => {
+                    // mutli-line strings are allowed
+                    if c == '\n' {
+                        sp.next_line();
+                    } else {
+                        string_chars.push(c);
+                    }
+                    self.advance(chars, sp);
+                }
+                None => {
+                    // report and return error (no token created)
+                    let report_string = self.err_reporter.report(
+                        "Unterminated string",
+                        sp.line,
+                        sp.column,
+                        1, // length of single char is 1
+                    );
+                    return Err(report_string);
+                }
+            };
         }
     }
 
