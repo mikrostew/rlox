@@ -232,7 +232,7 @@ impl fmt::Display for TokenKind {
             // TokenKind::Var => "Var",
             // TokenKind::While => "While",
             // Other
-            TokenKind::Eof => "Eof",
+            TokenKind::Eof => "EOF",
             TokenKind::Ignore => "",
         };
         write!(f, "{}", to_write)
@@ -247,24 +247,26 @@ struct Token {
     // literal: how to do a generic Object? maybe optional string, int, or whatever
     // OR, some Literal<> that holds a specific one? maybe...
 
-    // TODO: wrap this in something like TokenLocation?
-    // line number where the token appears
-    line: u64,
-    // column where the token starts
-    column: u64,
+    // line and column where the token appears
+    position: ScanPosition,
     // length of the token
-    length: usize,
+    length: u64,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: &str, /* literal,*/ line: u64, column: u64) -> Self {
+    pub fn new(kind: TokenKind, lexeme: &str, /* literal,*/ sp: &ScanPosition) -> Self {
+        let length = lexeme.len() as u64;
+
+        // scan position is at the end of the scanned token, so adjust that accordingly
+        let mut position = sp.clone();
+        position.adjust(length);
+
         Token {
             kind,
             lexeme: lexeme.to_string(),
             // TODO: literal,
-            line,
-            column,
-            length: lexeme.len(),
+            position,
+            length,
         }
     }
 
@@ -286,28 +288,46 @@ impl fmt::Debug for Token {
         write!(
             f,
             "{} {} line{}:col{}:len{}",
-            self.kind, self.lexeme, /*, self.literal*/ self.line, self.column, self.length
+            self.kind,
+            self.lexeme,
+            /*, self.literal*/ self.position.line,
+            self.position.column,
+            self.length
         )
     }
 }
 
 // keep track of current location
+#[derive(Clone)]
 struct ScanPosition {
-    // position of current character being considered
-    pub current_char: usize,
+    // TODO: will need file path?
     // current line number
-    pub line: u64,
+    line: u64,
     // current column
-    pub column: u64,
+    column: u64,
 }
 
 impl ScanPosition {
     pub fn new() -> Self {
         ScanPosition {
             // start at the beginning of everything
-            current_char: 1,
             line: 1,
-            column: 1,
+            column: 0,
+        }
+    }
+
+    pub fn next_char(&mut self) {
+        self.column += 1;
+    }
+
+    pub fn next_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
+    }
+
+    pub fn adjust(&mut self, by_chars: u64) {
+        if by_chars > 0 {
+            self.column -= by_chars - 1;
         }
     }
 }
@@ -353,12 +373,7 @@ impl Scanner {
             }
         }
 
-        tokens.push(Token::new(
-            TokenKind::Eof,
-            "",
-            scan_position.line,
-            scan_position.column,
-        ));
+        tokens.push(Token::new(TokenKind::Eof, "", &scan_position));
 
         if self.num_errors > 0 {
             Err(format!("Scanner encountered {} errors", self.num_errors))
@@ -368,8 +383,7 @@ impl Scanner {
     }
 
     fn advance(&self, chars: &mut Peekable<Chars>, sp: &mut ScanPosition) -> Option<char> {
-        sp.current_char += 1;
-        sp.column += 1;
+        sp.next_char();
         chars.next()
     }
 
@@ -402,7 +416,7 @@ impl Scanner {
         sp: &mut ScanPosition,
     ) -> Result<Option<Token>, String> {
         match self.advance(chars, sp) {
-            // just single characters
+            // single characters
             Some('(') => self.make_token(TokenKind::LeftParen, "(", sp),
             Some(')') => self.make_token(TokenKind::RightParen, ")", sp),
             Some('{') => self.make_token(TokenKind::LeftBrace, "{", sp),
@@ -417,7 +431,7 @@ impl Scanner {
             // these can be one or two characters
             Some('!') => {
                 let (kind, lexeme) = if self.match_next('=', chars, sp) {
-                    (TokenKind::BangEqual, "!-")
+                    (TokenKind::BangEqual, "!=")
                 } else {
                     (TokenKind::Bang, "!")
                 };
@@ -464,7 +478,15 @@ impl Scanner {
                     self.make_token(TokenKind::Slash, "/", sp)
                 }
             }
-            // TODO: reset column and increment line number for newline
+
+            // ignore whitespace
+            Some(' ') | Some('\r') | Some('\t') => self.make_token(TokenKind::Ignore, "", sp),
+            // handle newline
+            Some('\n') => {
+                sp.next_line();
+                self.make_token(TokenKind::Ignore, "", sp)
+            }
+
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
@@ -485,6 +507,6 @@ impl Scanner {
         lexeme: &str,
         sp: &ScanPosition,
     ) -> Result<Option<Token>, String> {
-        Ok(Some(Token::new(kind, lexeme, sp.line, sp.column)))
+        Ok(Some(Token::new(kind, lexeme, sp)))
     }
 }
