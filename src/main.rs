@@ -24,13 +24,11 @@ fn main() {
     }
 }
 
-struct Lox {
-    had_error: bool,
-}
+struct Lox {}
 
 impl Lox {
     fn new() -> Self {
-        Lox { had_error: false }
+        Lox {}
     }
 
     // Read in the given script file, and run it
@@ -38,9 +36,12 @@ impl Lox {
         let script_contents =
             fs::read_to_string(path).expect(&format!("Could not read input file {}", path));
         let mut lox = Lox::new();
-        lox.run(&script_contents);
-        if lox.had_error() {
-            exit(65);
+        match lox.run(&script_contents) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                exit(65);
+            }
         }
     }
 
@@ -55,18 +56,23 @@ impl Lox {
             match io::stdout().flush() {
                 // ensures that is printed immediately (if stdout is line-buffered)
                 Ok(_) => (),
-                Err(e) => eprintln!("Error flushing stdout: {}", e),
+                Err(e) => eprintln!("Error: could not flush stdout: {}", e),
             }
 
             // read in a line from the user
             match io::stdin().read_line(&mut input) {
                 Ok(_n) => {
-                    // println!("{} bytes read", n);
-                    lox.run(&input);
-                    lox.reset_err();
+                    // println!("{} bytes read", _n);
+                    match lox.run(&input) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            // print the error, but don't exit the interpreter
+                            eprintln!("Error: {}", e);
+                        }
+                    }
                 }
-                Err(error) => {
-                    eprintln!("error: {}", error);
+                Err(e) => {
+                    eprintln!("Error: could not read input line: {}", e);
                     exit(1);
                 }
             }
@@ -74,37 +80,58 @@ impl Lox {
     }
 
     // Run the input text
-    fn run(&mut self, source: &str) {
-        let mut scanner = Scanner::new(source.to_string(), self);
-        let tokens = scanner.scan_tokens();
+    fn run(&mut self, source: &str) -> Result<(), String> {
+        let err_reporter = BasicErrorReporter::new();
+        let scanner = Scanner::new(source.to_string(), err_reporter);
+        let tokens = scanner.scan_tokens()?;
 
-        // For now, just print the tokens.
+        // TODO: For now, just print the tokens (this can be a cmd line option later)
         for token in tokens {
             println!("{:?}", token);
         }
-    }
-
-    // for error handling
-    fn error(&mut self, message: &str, line_num: u64, column: u64, _length: u64) {
-        // TODO:
-        // the book doesn't implement it, but given those args it should be possible to do this:
-        //
-        // Error: Unexpected "," in argument list.
-        //
-        //     15:23 | function(first, second,);
-        //                                   ^-- here
-        println!("[line {}:{}] Error: {}", line_num, column, message);
-        self.had_error = true;
-    }
-
-    fn had_error(&self) -> bool {
-        self.had_error
-    }
-
-    fn reset_err(&mut self) {
-        self.had_error = false;
+        Ok(())
     }
 }
+
+trait ErrorReporter {
+    fn report(&self, message: &str, line_num: u64, column: u64, _length: u64) -> String;
+}
+
+struct BasicErrorReporter {}
+
+impl BasicErrorReporter {
+    pub fn new() -> Self {
+        BasicErrorReporter {}
+    }
+}
+
+impl ErrorReporter for BasicErrorReporter {
+    fn report(&self, message: &str, line_num: u64, column: u64, _length: u64) -> String {
+        let error_report = format!("Error: {} [line {}:{}]", message, line_num, column);
+        eprintln!("{}", error_report);
+        error_report
+    }
+}
+
+// TODO:
+// the book doesn't implement it, but given those args it should be possible to do this:
+//
+// Error: Unexpected "," in argument list.
+//
+//     15:23 | function(first, second,);
+//                                   ^-- here
+//
+//  OR, like cargo does:
+//
+// error[E0615]: attempted to take value of method `had_error` on type `&Lox`
+//   --> src/main.rs:99:14
+//    |
+// 99 |         self.had_error
+//    |              ^^^^^^^^^ help: use parentheses to call the method: `had_error()`
+//
+// fn error(&mut self, message: &str, line_num: u64, column: u64, _length: u64) {
+//     println!("[line {}:{}] Error: {}", line_num, column, message);
+// }
 
 // the kind of token that was scanned
 #[derive(PartialEq)]
@@ -226,24 +253,18 @@ struct Token {
     // column where the token starts
     column: u64,
     // length of the token
-    length: u64,
+    length: usize,
 }
 
 impl Token {
-    pub fn new(
-        kind: TokenKind,
-        lexeme: &str,
-        /* literal,*/ line: u64,
-        column: u64,
-        length: u64,
-    ) -> Self {
+    pub fn new(kind: TokenKind, lexeme: &str, /* literal,*/ line: u64, column: u64) -> Self {
         Token {
             kind,
             lexeme: lexeme.to_string(),
             // TODO: literal,
             line,
             column,
-            length,
+            length: lexeme.len(),
         }
     }
 
@@ -270,101 +291,100 @@ impl fmt::Debug for Token {
     }
 }
 
-struct Scanner<'a> {
-    source: String,
-    // source_chars: Option<Chars<'a>>,
-    // tokens: Vec<Token>,
-
-    // keep track of current location and lexeme we're scanning
-    lexeme: String,
-    // position of first character in the current lexeme
-    lexeme_start: usize,
-    // length of current lexeme
-    lexeme_length: u64,
+// keep track of current location
+struct ScanPosition {
     // position of current character being considered
-    current_char: usize,
+    pub current_char: usize,
     // current line number
-    line: u64,
+    pub line: u64,
     // current column
-    column: u64,
-
-    // TODO: could I pass in something else, that only does error reporting, instead of a ref to
-    // everything?
-    lox: &'a mut Lox, // for error reporting
+    pub column: u64,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: String, lox: &'a mut Lox) -> Self {
+impl ScanPosition {
+    pub fn new() -> Self {
+        ScanPosition {
+            // start at the beginning of everything
+            current_char: 1,
+            line: 1,
+            column: 1,
+        }
+    }
+}
+
+struct Scanner {
+    source: String,
+    // reporter that implements this trait
+    err_reporter: Box<ErrorReporter>,
+    // how many errors the scanner encountered
+    num_errors: u64,
+}
+
+impl Scanner {
+    pub fn new(source: String, err_reporter: impl ErrorReporter + 'static) -> Self {
         Scanner {
             source,
-            // source_chars: None,
-            // tokens: Vec::new(),
-            lexeme: String::new(),
-            lexeme_start: 0,
-            lexeme_length: 0,
-            current_char: 0,
-            line: 1,
-            column: 0,
-            lox,
+            err_reporter: Box::new(err_reporter),
+            num_errors: 0,
         }
     }
 
-    fn scan_tokens(&mut self) -> Vec<Token> {
+    fn scan_tokens(mut self) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
         let source = self.source.clone();
         let mut chars = source.chars().peekable();
+        let mut scan_position = ScanPosition::new();
 
         // scan tokens until EOF is reached
         loop {
-            // We are at the beginning of the next lexeme.
-            self.lexeme = String::new();
-            self.lexeme_start = self.current_char;
-            self.lexeme_length = 0;
-
-            let current_token = self.scan_token(&mut chars);
-
-            match current_token {
-                // TODO: ignore some tokens - comment
-                Some(token) => {
-                    if !token.can_ignore() {
-                        tokens.push(token)
+            match self.scan_token(&mut chars, &mut scan_position) {
+                Ok(current_token) => {
+                    match current_token {
+                        Some(token) => {
+                            if !token.can_ignore() {
+                                tokens.push(token)
+                            }
+                        }
+                        // no more tokens, at EOF
+                        None => break,
                     }
                 }
-                // no more tokens, at EOF
-                None => break,
+                Err(_) => self.num_errors += 1,
             }
         }
 
         tokens.push(Token::new(
             TokenKind::Eof,
             "",
-            self.line,
-            self.column,
-            0, // length 0
+            scan_position.line,
+            scan_position.column,
         ));
 
-        tokens
+        if self.num_errors > 0 {
+            Err(format!("Scanner encountered {} errors", self.num_errors))
+        } else {
+            Ok(tokens)
+        }
     }
 
-    fn error(&mut self, message: &str) {
-        self.lox
-            .error(message, self.line, self.column, self.lexeme_length);
-    }
-
-    fn advance(&mut self, chars: &mut Peekable<Chars>) -> Option<char> {
-        self.current_char += 1;
-        self.lexeme_length += 1;
-        self.column += 1;
+    fn advance(&self, chars: &mut Peekable<Chars>, sp: &mut ScanPosition) -> Option<char> {
+        sp.current_char += 1;
+        sp.column += 1;
         chars.next()
     }
 
     // if the next character matches the char_to_match, consume it and return true
-    fn match_next(&mut self, char_to_match: char, chars: &mut Peekable<Chars>) -> bool {
+    fn match_next(
+        &self,
+        char_to_match: char,
+        chars: &mut Peekable<Chars>,
+        sp: &mut ScanPosition,
+    ) -> bool {
         match chars.peek() {
             Some(&c) => {
                 // if the next character matches, consume it and advance things accordingly
                 if c == char_to_match {
-                    self.advance(chars);
+                    self.advance(chars, sp);
                     true
                 } else {
                     // if not, don't consume the char
@@ -376,88 +396,95 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn scan_token(&mut self, chars: &mut Peekable<Chars>) -> Option<Token> {
-        match self.advance(chars) {
+    fn scan_token(
+        &self,
+        chars: &mut Peekable<Chars>,
+        sp: &mut ScanPosition,
+    ) -> Result<Option<Token>, String> {
+        match self.advance(chars, sp) {
             // just single characters
-            Some('(') => self.make_token(TokenKind::LeftParen),
-            Some(')') => self.make_token(TokenKind::RightParen),
-            Some('{') => self.make_token(TokenKind::LeftBrace),
-            Some('}') => self.make_token(TokenKind::RightBrace),
-            Some(',') => self.make_token(TokenKind::Comma),
-            Some('.') => self.make_token(TokenKind::Dot),
-            Some('-') => self.make_token(TokenKind::Minus),
-            Some('+') => self.make_token(TokenKind::Plus),
-            Some(';') => self.make_token(TokenKind::Semicolon),
-            Some('*') => self.make_token(TokenKind::Star),
+            Some('(') => self.make_token(TokenKind::LeftParen, "(", sp),
+            Some(')') => self.make_token(TokenKind::RightParen, ")", sp),
+            Some('{') => self.make_token(TokenKind::LeftBrace, "{", sp),
+            Some('}') => self.make_token(TokenKind::RightBrace, "}", sp),
+            Some(',') => self.make_token(TokenKind::Comma, ",", sp),
+            Some('.') => self.make_token(TokenKind::Dot, ".", sp),
+            Some('-') => self.make_token(TokenKind::Minus, "-", sp),
+            Some('+') => self.make_token(TokenKind::Plus, "+", sp),
+            Some(';') => self.make_token(TokenKind::Semicolon, ";", sp),
+            Some('*') => self.make_token(TokenKind::Star, "*", sp),
 
             // these can be one or two characters
             Some('!') => {
-                let kind = if self.match_next('=', chars) {
-                    TokenKind::BangEqual
+                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                    (TokenKind::BangEqual, "!-")
                 } else {
-                    TokenKind::Bang
+                    (TokenKind::Bang, "!")
                 };
-                self.make_token(kind)
+                self.make_token(kind, lexeme, sp)
             }
             Some('=') => {
-                let kind = if self.match_next('=', chars) {
-                    TokenKind::EqualEqual
+                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                    (TokenKind::EqualEqual, "==")
                 } else {
-                    TokenKind::Equal
+                    (TokenKind::Equal, "=")
                 };
-                self.make_token(kind)
+                self.make_token(kind, lexeme, sp)
             }
             Some('<') => {
-                let kind = if self.match_next('=', chars) {
-                    TokenKind::LessEqual
+                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                    (TokenKind::LessEqual, "<=")
                 } else {
-                    TokenKind::Less
+                    (TokenKind::Less, "<")
                 };
-                self.make_token(kind)
+                self.make_token(kind, lexeme, sp)
             }
             Some('>') => {
-                let kind = if self.match_next('=', chars) {
-                    TokenKind::GreaterEqual
+                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                    (TokenKind::GreaterEqual, ">=")
                 } else {
-                    TokenKind::Greater
+                    (TokenKind::Greater, ">")
                 };
-                self.make_token(kind)
+                self.make_token(kind, lexeme, sp)
             }
 
-            // TODO: this can be '/', or '// comment'
+            // this can be '/', or '// comment'
             Some('/') => {
-                if self.match_next('/', chars) {
+                if self.match_next('/', chars, sp) {
                     // comment goes to the end of the line (or end of string)
                     loop {
-                        println!("current char: {:?}", chars.peek());
                         match chars.peek() {
                             Some(&'\n') => break,
-                            Some(_) => self.advance(chars),
+                            Some(_) => self.advance(chars, sp),
                             None => break,
                         };
                     }
-                    self.make_token(TokenKind::Ignore)
+                    self.make_token(TokenKind::Ignore, "", sp)
                 } else {
-                    self.make_token(TokenKind::Slash)
+                    self.make_token(TokenKind::Slash, "/", sp)
                 }
             }
             // TODO: reset column and increment line number for newline
-            // TODO
             Some(c) => {
-                self.error(&format!("Unexpected character '{}'", c));
-                self.make_token(TokenKind::Ignore)
+                // report and return error (no token created)
+                let report_string = self.err_reporter.report(
+                    &format!("Unexpected character '{}'", c),
+                    sp.line,
+                    sp.column,
+                    1, // length of single char is 1
+                );
+                Err(report_string)
             }
-            None => None,
+            None => Ok(None),
         }
     }
 
-    fn make_token(&self, kind: TokenKind) -> Option<Token> {
-        Some(Token::new(
-            kind,
-            &self.lexeme,
-            self.line,
-            self.column,
-            self.lexeme_length,
-        ))
+    fn make_token(
+        &self,
+        kind: TokenKind,
+        lexeme: &str,
+        sp: &ScanPosition,
+    ) -> Result<Option<Token>, String> {
+        Ok(Some(Token::new(kind, lexeme, sp.line, sp.column)))
     }
 }
