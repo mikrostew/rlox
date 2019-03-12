@@ -1,7 +1,5 @@
 use crate::token::Token;
 
-// TODO: write some macros to create these?
-
 // for this grammar:
 //
 // expression → literal | unary | binary | grouping ;
@@ -29,8 +27,10 @@ impl Expr {
 }
 
 pub enum Literal {
-    String(String),
+    Bool(bool),
+    Nil,
     Number(f64),
+    String(String),
 }
 
 impl Literal {
@@ -71,7 +71,8 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_literal(&self, l: &Literal) -> String {
         match l {
-            // TODO: nil for literal
+            Literal::Bool(b) => b.to_string(),
+            Literal::Nil => "nil".to_string(),
             Literal::Number(num) => format!("{}", num),
             Literal::String(s) => s.clone(),
         }

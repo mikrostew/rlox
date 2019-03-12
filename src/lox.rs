@@ -3,7 +3,9 @@ use std::io;
 use std::io::Write;
 use std::process::exit;
 
+use crate::ast::AstPrinter;
 use crate::error;
+use crate::parser::Parser;
 use crate::scanner::Scanner;
 
 pub struct Lox {}
@@ -64,13 +66,21 @@ impl Lox {
     // Run the input text
     fn run(&mut self, source: &str) -> Result<(), String> {
         let err_reporter = error::BasicReporter::new();
+
         let scanner = Scanner::new(source.to_string(), err_reporter);
         let tokens = scanner.scan_tokens()?;
+        // TODO: add this as a command line option (--show-tokens or --debug-tokens)
+        // for token in tokens {
+        //     println!("{:?}", token);
+        // }
 
-        // TODO: For now, just print the tokens (this can be a cmd line option later)
-        for token in tokens {
-            println!("{:?}", token);
-        }
+        let parser = Parser::new(tokens);
+        let expression = parser.parse()?;
+
+        // TODO: add this as a command line option (--show-ast or --debug-ast)
+        let ast_printer = AstPrinter::new();
+        println!("ast: {}", ast_printer.print(expression));
+
         Ok(())
     }
 }

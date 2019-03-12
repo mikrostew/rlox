@@ -3,7 +3,7 @@ use std::fmt;
 use crate::scanner::ScanPosition;
 
 // the kind of token that was scanned
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum TokenKind {
     // Single-character tokens
     LeftParen,
@@ -143,14 +143,15 @@ impl TokenKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Token {
-    kind: TokenKind,
+    pub kind: TokenKind,
     // the raw characters from the input
-    lexeme: String,
+    pub lexeme: String,
     // line and column where the token appears
-    position: ScanPosition,
+    pub position: ScanPosition,
     // length of the token
-    length: u64,
+    pub length: u64,
 }
 
 impl Token {
