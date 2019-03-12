@@ -158,7 +158,7 @@ impl Token {
         let length = lexeme.len() as u64;
 
         // scan position is at the end of the scanned token, so adjust that accordingly
-        let mut position = sp.clone();
+        let mut position = sp.clone(); // TODO: this should not .clone() the borrow, just don't borrow
         position.adjust(length);
 
         Token {
@@ -176,7 +176,7 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", self.kind, self.lexeme)
+        write!(f, "{}[{}]", self.kind, self.lexeme)
     }
 }
 
