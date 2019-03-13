@@ -92,7 +92,7 @@ impl Parser {
                 TokenKind::String(s) => Expr::Literal(Literal::String(s.to_string())),
                 TokenKind::LeftParen => {
                     let expr = self.expression(tokens)?;
-                    // TODO
+                    self.consume_or_err(tokens, TokenKind::RightParen, "Missing closing ')'")?;
                     Expr::Grouping(Box::new(expr))
                 }
                 _ => return Err(format!("Expected primary, got {}", token)),
@@ -165,5 +165,24 @@ impl Parser {
         } else {
             None
         }
+    }
+
+    fn consume_or_err(
+        &self,
+        tokens: &mut Peekable<Iter<Token>>,
+        kind: TokenKind,
+        err: &str,
+    ) -> Result<Token, String> {
+        if let Some(token) = tokens.peek() {
+            if token.kind == kind {
+                // consume the token
+                return tokens
+                    .next()
+                    .cloned()
+                    .ok_or("consume() could not get next token for some reason".to_string());
+            }
+        }
+        // TODO: need to have custom error things, with the token, maybe position, stuff like that
+        Err(err.to_string())
     }
 }
