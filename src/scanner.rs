@@ -39,7 +39,9 @@ impl Scanner {
                             }
                         }
                         // no more tokens, at EOF
-                        None => break,
+                        None => {
+                            break;
+                        }
                     }
                 }
                 Err(_) => self.num_errors += 1,
@@ -294,16 +296,7 @@ impl Scanner {
                                     }
                                     // if it's anything else, just return the token, finally
                                     _ => {
-                                        // parse the number
-                                        let parsed_float = match f64::from_str(&digit_string) {
-                                            Ok(f) => f,
-                                            Err(e) => {
-                                                return Err(format!(
-                                                    "Could not parse number: {}",
-                                                    e.to_string()
-                                                ));
-                                            }
-                                        };
+                                        let parsed_float = self.parse_number(&digit_string, pos)?;
                                         return self.make_token(
                                             TokenKind::Number(parsed_float),
                                             &digit_string,
@@ -336,20 +329,26 @@ impl Scanner {
                         }
                     }
                 }
-                // anything else ends the number
-                Some(_) => {
-                    // parse the number
-                    let parsed_float = match f64::from_str(&digit_string) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            return Err(format!("Could not parse number: {}", e.to_string()));
-                        }
-                    };
+                // anything else or EOF ends the number
+                Some(_) | None => {
+                    let parsed_float = self.parse_number(&digit_string, pos)?;
                     return self.make_token(TokenKind::Number(parsed_float), &digit_string, pos);
                 }
-                None => return Ok(None),
             }
         }
+    }
+
+    fn parse_number(&self, digit_string: &String, pos: &Position) -> Result<f64, String> {
+        f64::from_str(&digit_string).map_err(|e| {
+            // TODO: position and length are wrong here
+            let report_string = self.err_reporter.report(
+                &format!("Could not parse number: {}", e.to_string()),
+                "could not parse",
+                pos,
+                1,
+            );
+            report_string
+        })
     }
 
     fn handle_identifier(
