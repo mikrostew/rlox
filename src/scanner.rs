@@ -167,9 +167,12 @@ impl Scanner {
                             }
                             None => {
                                 // report and return error (no token created)
-                                let report_string =
-                                    self.err_reporter
-                                        .report("Unterminated block comment", pos, 1);
+                                let report_string = self.err_reporter.report(
+                                    "unterminated block comment",
+                                    "expected matching `*/`",
+                                    pos,
+                                    1,
+                                );
                                 return Err(report_string);
                             }
                         };
@@ -203,7 +206,8 @@ impl Scanner {
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
-                    &format!("Unexpected character `{}`", c),
+                    &format!("unexpected character `{}`", c),
+                    "unexpected char",
                     pos,
                     1, // length of single char is 1
                 );
@@ -241,7 +245,8 @@ impl Scanner {
                 None => {
                     // report and return error (no token created)
                     let report_string = self.err_reporter.report(
-                        "Unterminated string",
+                        "unterminated string",
+                        "expected `\"`",
                         pos,
                         1, // length of single char is 1
                     );
@@ -312,7 +317,8 @@ impl Scanner {
                         Some(c) => {
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
-                                &format!("Expected digit after decimal, found {}", c),
+                                &format!("expected digit after decimal, found `{}`", c),
+                                "expected digit",
                                 pos,
                                 1,
                             );
@@ -321,7 +327,8 @@ impl Scanner {
                         None => {
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
-                                "Expected digit after decimal, found EOF",
+                                "expected digit after decimal, found EOF",
+                                "expected digit",
                                 pos,
                                 1,
                             );

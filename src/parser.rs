@@ -109,10 +109,13 @@ impl Parser {
                     self.consume_or_err(tokens, TokenKind::RightParen, "Missing closing ')'")?;
                     Expr::Grouping(Box::new(expr))
                 }
-                // TODO: better description than 'primary'
                 _ => {
                     let report_string = self.err_reporter.report(
-                        &format!("Expected primary, got `{}`", token),
+                        &format!(
+                            "unexpected token: expected literal or '(', found `{}`",
+                            token
+                        ),
+                        &format!("unexpected token"),
                         &token.position,
                         1,
                     );
@@ -121,7 +124,9 @@ impl Parser {
             })
         } else {
             let report_string = self.err_reporter.report(
+                // TODO: better error messages
                 "ran out of tokens in primary()",
+                "ran out of tokens",
                 // TODO: report the position where we started parsing the expression
                 &Position::new(),
                 1,
@@ -207,11 +212,12 @@ impl Parser {
                 return Ok(tokens
                     .next()
                     .cloned()
+                    // TODO: parser should not panic (this should be an error)
                     .expect("could not consume token after peeking"));
             }
         }
-        // TODO: position is end of file?
-        let report_string = self.err_reporter.report(err, &Position::new(), 1);
+        // TODO: position is end of file/source?
+        let report_string = self.err_reporter.report(err, err, &Position::new(), 1);
         Err(report_string)
     }
 }

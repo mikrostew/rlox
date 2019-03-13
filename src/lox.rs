@@ -47,7 +47,8 @@ impl Lox {
             match io::stdin().read_line(&mut input) {
                 Ok(_n) => {
                     // println!("{} bytes read", _n);
-                    match lox.run(&input) {
+                    let trimmed = input.trim();
+                    match lox.run(trimmed) {
                         Ok(_) => (),
                         Err(e) => {
                             // print the error, but don't exit the interpreter
@@ -65,16 +66,18 @@ impl Lox {
 
     // Run the input text
     fn run(&mut self, source: &str) -> Result<(), String> {
-        let err_reporter = error::BasicReporter::new();
-
-        let scanner = Scanner::new(source.to_string(), err_reporter);
+        // TODO: creating 2 reporters here, but not sure how else to do this at the moment
+        // (because they would share the same string on the heap, which doesn't work)
+        let err_reporter1 = error::BetterReporter::new(source.to_string());
+        let scanner = Scanner::new(source.to_string(), err_reporter1);
         let tokens = scanner.scan_tokens()?;
         // TODO: add this as a command line option (--show-tokens or --debug-tokens)
         // for token in tokens {
         //     println!("{:?}", token);
         // }
 
-        let parser = Parser::new(tokens, err_reporter);
+        let err_reporter2 = error::BetterReporter::new(source.to_string());
+        let parser = Parser::new(tokens, err_reporter2);
         let expression = parser.parse()?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)

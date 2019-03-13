@@ -1,42 +1,66 @@
 use crate::token::Position;
 
 pub trait Reporter {
-    fn report(&self, message: &str, pos: &Position, _length: u64) -> String;
+    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position, _length: u64)
+        -> String;
 }
 
-#[derive(Clone, Copy)]
-pub struct BasicReporter {}
+// pub struct BasicReporter {}
 
-impl BasicReporter {
-    pub fn new() -> Self {
-        BasicReporter {}
+// impl BasicReporter {
+//     pub fn new() -> Self {
+//         BasicReporter {}
+//     }
+// }
+
+// impl Reporter for BasicReporter {
+//     fn report(&self, message: &str, pos: &Position, _length: u64) -> String {
+//         let error_report = format!("Error: {} [line {}:{}]", message, pos.line, pos.column);
+//         eprintln!("{}", error_report);
+//         error_report
+//     }
+// }
+
+pub struct BetterReporter {
+    source: String,
+}
+
+impl BetterReporter {
+    pub fn new(source: String) -> Self {
+        BetterReporter {
+            source: source.trim().to_string(),
+        }
     }
 }
 
-impl Reporter for BasicReporter {
-    fn report(&self, message: &str, pos: &Position, _length: u64) -> String {
-        let error_report = format!("Error: {} [line {}:{}]", message, pos.line, pos.column);
-        eprintln!("{}", error_report);
-        error_report
-    }
-}
-
-// TODO: better error reporting
-// the book doesn't implement it, but given those args it should be possible to do this:
+// report an error similar to cargo's format:
 //
-// Error: Unexpected "," in argument list.
-//
-//     15:23 | function(first, second,);
-//                                   ^-- here
-//
-//  OR, like cargo does:
-//
-// error[E0615]: attempted to take value of method `had_error` on type `&Lox`
-//   --> src/main.rs:99:14
+// error: attempted to take value of method `had_error` on type `&Lox`
+//   --> 99:14
 //    |
 // 99 |         self.had_error
-//    |              ^^^^^^^^^ help: use parentheses to call the method: `had_error()`
+//    |              ^^^^^^^^^ add `()`?
 //
-// fn error(&mut self, message: &str, line_num: u64, column: u64, _length: u64) {
-//     println!("[line {}:{}] Error: {}", line_num, column, message);
-// }
+impl Reporter for BetterReporter {
+    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position, length: u64) -> String {
+        let line = pos.line;
+        let col = pos.column;
+
+        eprintln!("error: {}", error_msg);
+        // TODO: include file name from Position
+        eprintln!("  --> {}:{}", line, col);
+
+        // TODO: figure out the number of digits in the line number
+        // (for now, just assume max of 3 digits)
+        // TODO: print a line other than the first one from source
+        eprintln!("    |");
+        eprintln!("{:>3} |  {}", line, self.source);
+        eprintln!(
+            "    |  {:3$}{:4$} {}",
+            " ", "^", positional_msg, col as usize, length as usize
+        );
+        eprintln!("");
+
+        error_msg.to_string()
+    }
+}
