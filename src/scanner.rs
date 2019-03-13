@@ -1,51 +1,9 @@
-use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 use std::str::FromStr;
 
 use crate::error::Reporter;
-use crate::token::{Token, TokenKind};
-
-// keep track of current location
-#[derive(Clone)]
-pub struct ScanPosition {
-    // TODO: will need file path?
-    // current line number
-    line: u64,
-    // current column
-    column: u64,
-}
-
-impl ScanPosition {
-    pub fn new() -> Self {
-        ScanPosition {
-            // start at the beginning of everything
-            line: 1,
-            column: 0,
-        }
-    }
-
-    pub fn next_char(&mut self) {
-        self.column += 1;
-    }
-
-    pub fn next_line(&mut self) {
-        self.line += 1;
-        self.column = 0;
-    }
-
-    pub fn adjust(&mut self, by_chars: u64) {
-        if by_chars > 0 {
-            self.column -= by_chars - 1;
-        }
-    }
-}
-
-impl fmt::Display for ScanPosition {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
-    }
-}
+use crate::token::{Position, Token, TokenKind};
 
 pub struct Scanner {
     source: String,
@@ -56,7 +14,7 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(source: String, err_reporter: impl Reporter + 'static) -> Self {
+    pub fn new<R: Reporter + 'static>(source: String, err_reporter: R) -> Self {
         Scanner {
             source,
             err_reporter: Box::new(err_reporter),
@@ -68,11 +26,11 @@ impl Scanner {
         let mut tokens = Vec::new();
         let source = self.source.clone();
         let mut chars = source.chars().peekable();
-        let mut scan_position = ScanPosition::new();
+        let mut position = Position::new();
 
         // scan tokens until EOF is reached
         loop {
-            match self.scan_token(&mut chars, &mut scan_position) {
+            match self.scan_token(&mut chars, &mut position) {
                 Ok(current_token) => {
                     match current_token {
                         Some(token) => {
@@ -88,7 +46,7 @@ impl Scanner {
             }
         }
 
-        tokens.push(Token::new(TokenKind::Eof, "", &scan_position));
+        tokens.push(Token::new(TokenKind::Eof, "", &position));
 
         if self.num_errors > 0 {
             Err(format!("Scanner encountered {} errors", self.num_errors))
@@ -97,8 +55,8 @@ impl Scanner {
         }
     }
 
-    fn advance(&self, chars: &mut Peekable<Chars>, sp: &mut ScanPosition) -> Option<char> {
-        sp.next_char();
+    fn advance(&self, chars: &mut Peekable<Chars>, pos: &mut Position) -> Option<char> {
+        pos.next_char();
         chars.next()
     }
 
@@ -107,13 +65,13 @@ impl Scanner {
         &self,
         char_to_match: char,
         chars: &mut Peekable<Chars>,
-        sp: &mut ScanPosition,
+        pos: &mut Position,
     ) -> bool {
         match chars.peek() {
             Some(&c) => {
                 // if the next character matches, consume it and advance things accordingly
                 if c == char_to_match {
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                     true
                 } else {
                     // if not, don't consume the char
@@ -128,129 +86,125 @@ impl Scanner {
     fn scan_token(
         &self,
         chars: &mut Peekable<Chars>,
-        sp: &mut ScanPosition,
+        pos: &mut Position,
     ) -> Result<Option<Token>, String> {
-        let current_char = self.advance(chars, sp);
+        let current_char = self.advance(chars, pos);
         match current_char {
             // single characters
-            Some('(') => self.make_token(TokenKind::LeftParen, "(", sp),
-            Some(')') => self.make_token(TokenKind::RightParen, ")", sp),
-            Some('{') => self.make_token(TokenKind::LeftBrace, "{", sp),
-            Some('}') => self.make_token(TokenKind::RightBrace, "}", sp),
-            Some(',') => self.make_token(TokenKind::Comma, ",", sp),
-            Some('.') => self.make_token(TokenKind::Dot, ".", sp),
-            Some('-') => self.make_token(TokenKind::Minus, "-", sp),
-            Some('+') => self.make_token(TokenKind::Plus, "+", sp),
-            Some(';') => self.make_token(TokenKind::Semicolon, ";", sp),
-            Some('*') => self.make_token(TokenKind::Star, "*", sp),
+            Some('(') => self.make_token(TokenKind::LeftParen, "(", pos),
+            Some(')') => self.make_token(TokenKind::RightParen, ")", pos),
+            Some('{') => self.make_token(TokenKind::LeftBrace, "{", pos),
+            Some('}') => self.make_token(TokenKind::RightBrace, "}", pos),
+            Some(',') => self.make_token(TokenKind::Comma, ",", pos),
+            Some('.') => self.make_token(TokenKind::Dot, ".", pos),
+            Some('-') => self.make_token(TokenKind::Minus, "-", pos),
+            Some('+') => self.make_token(TokenKind::Plus, "+", pos),
+            Some(';') => self.make_token(TokenKind::Semicolon, ";", pos),
+            Some('*') => self.make_token(TokenKind::Star, "*", pos),
 
             // these can be one or two characters
             Some('!') => {
-                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                let (kind, lexeme) = if self.match_next('=', chars, pos) {
                     (TokenKind::BangEqual, "!=")
                 } else {
                     (TokenKind::Bang, "!")
                 };
-                self.make_token(kind, lexeme, sp)
+                self.make_token(kind, lexeme, pos)
             }
             Some('=') => {
-                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                let (kind, lexeme) = if self.match_next('=', chars, pos) {
                     (TokenKind::EqualEqual, "==")
                 } else {
                     (TokenKind::Equal, "=")
                 };
-                self.make_token(kind, lexeme, sp)
+                self.make_token(kind, lexeme, pos)
             }
             Some('<') => {
-                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                let (kind, lexeme) = if self.match_next('=', chars, pos) {
                     (TokenKind::LessEqual, "<=")
                 } else {
                     (TokenKind::Less, "<")
                 };
-                self.make_token(kind, lexeme, sp)
+                self.make_token(kind, lexeme, pos)
             }
             Some('>') => {
-                let (kind, lexeme) = if self.match_next('=', chars, sp) {
+                let (kind, lexeme) = if self.match_next('=', chars, pos) {
                     (TokenKind::GreaterEqual, ">=")
                 } else {
                     (TokenKind::Greater, ">")
                 };
-                self.make_token(kind, lexeme, sp)
+                self.make_token(kind, lexeme, pos)
             }
 
             // this can be '/', or '// comment', or '/* ... */'
             Some('/') => {
                 // '// comment' style comments
-                if self.match_next('/', chars, sp) {
+                if self.match_next('/', chars, pos) {
                     // comment goes to the end of the line (or end of string)
                     loop {
                         match chars.peek() {
                             Some(&'\n') => break,
-                            Some(_) => self.advance(chars, sp),
+                            Some(_) => self.advance(chars, pos),
                             None => break, // got to the end of file, OK
                         };
                     }
-                    self.make_token(TokenKind::Ignore, "", sp)
+                    self.make_token(TokenKind::Ignore, "", pos)
                 // '/* ... */' style comments
-                } else if self.match_next('*', chars, sp) {
+                } else if self.match_next('*', chars, pos) {
                     // comment goes to the end of the line (or end of string)
                     loop {
                         match chars.peek() {
                             Some(&'*') => {
                                 // check for the end of the comment block
-                                self.advance(chars, sp);
+                                self.advance(chars, pos);
                                 if chars.peek() == Some(&'/') {
-                                    self.advance(chars, sp);
+                                    self.advance(chars, pos);
                                     break;
                                 }
                             }
                             Some(_) => {
-                                self.advance(chars, sp);
+                                self.advance(chars, pos);
                             }
                             None => {
                                 // report and return error (no token created)
-                                let report_string = self.err_reporter.report(
-                                    "Unterminated block comment",
-                                    sp.line,
-                                    sp.column,
-                                    1,
-                                );
+                                let report_string =
+                                    self.err_reporter
+                                        .report("Unterminated block comment", pos, 1);
                                 return Err(report_string);
                             }
                         };
                     }
-                    self.make_token(TokenKind::Ignore, "", sp)
+                    self.make_token(TokenKind::Ignore, "", pos)
                 // just a slash
                 } else {
-                    self.make_token(TokenKind::Slash, "/", sp)
+                    self.make_token(TokenKind::Slash, "/", pos)
                 }
             }
 
             // ignore whitespace
-            Some(' ') | Some('\r') | Some('\t') => self.make_token(TokenKind::Ignore, "", sp),
+            Some(' ') | Some('\r') | Some('\t') => self.make_token(TokenKind::Ignore, "", pos),
             // handle newline
             Some('\n') => {
-                sp.next_line();
-                self.make_token(TokenKind::Ignore, "", sp)
+                pos.next_line();
+                self.make_token(TokenKind::Ignore, "", pos)
             }
 
             // string literals
-            Some('"') => self.handle_string(chars, sp),
+            Some('"') => self.handle_string(chars, pos),
 
             // number literals
-            Some('0'..='9') => self.handle_number(current_char.unwrap(), chars, sp),
+            Some('0'..='9') => self.handle_number(current_char.unwrap(), chars, pos),
 
             // identifiers and keywords
             Some('a'..='z') | Some('A'..='Z') | Some('_') => {
-                self.handle_identifier(current_char.unwrap(), chars, sp)
+                self.handle_identifier(current_char.unwrap(), chars, pos)
             }
 
             Some(c) => {
                 // report and return error (no token created)
                 let report_string = self.err_reporter.report(
                     &format!("Unexpected character `{}`", c),
-                    sp.line,
-                    sp.column,
+                    pos,
                     1, // length of single char is 1
                 );
                 Err(report_string)
@@ -262,34 +216,33 @@ impl Scanner {
     fn handle_string(
         &self,
         chars: &mut Peekable<Chars>,
-        sp: &mut ScanPosition,
+        pos: &mut Position,
     ) -> Result<Option<Token>, String> {
         let mut string_chars = String::new();
         loop {
             match chars.peek() {
                 Some('"') => {
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                     return self.make_token(
                         TokenKind::String(string_chars.clone()),
                         &format!("\"{}\"", string_chars),
-                        sp,
+                        pos,
                     );
                 }
                 Some(&c) => {
                     // mutli-line strings are allowed
                     if c == '\n' {
-                        sp.next_line();
+                        pos.next_line();
                     } else {
                         string_chars.push(c);
                     }
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                 }
                 None => {
                     // report and return error (no token created)
                     let report_string = self.err_reporter.report(
                         "Unterminated string",
-                        sp.line,
-                        sp.column,
+                        pos,
                         1, // length of single char is 1
                     );
                     return Err(report_string);
@@ -302,7 +255,7 @@ impl Scanner {
         &self,
         digit: char,
         chars: &mut Peekable<Chars>,
-        sp: &mut ScanPosition,
+        pos: &mut Position,
     ) -> Result<Option<Token>, String> {
         let mut digit_string = String::new();
         digit_string.push(digit);
@@ -313,18 +266,18 @@ impl Scanner {
                 // if if's a digit, push onto the string
                 Some('0'..='9') => {
                     digit_string.push(*peeked.unwrap());
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                 }
                 // if it's a decimal, only add if it's followed by another digit
                 Some('.') => {
                     // TODO: to add methods to numbers, this will have to change
                     digit_string.push('.');
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                     let peek_next = chars.peek();
                     match peek_next {
                         Some('0'..='9') => {
                             digit_string.push(*peek_next.unwrap());
-                            self.advance(chars, sp);
+                            self.advance(chars, pos);
 
                             loop {
                                 // if there are any more digits, consume them
@@ -332,7 +285,7 @@ impl Scanner {
                                 match peeked {
                                     Some('0'..='9') => {
                                         digit_string.push(*peeked.unwrap());
-                                        self.advance(chars, sp);
+                                        self.advance(chars, pos);
                                     }
                                     // if it's anything else, just return the token, finally
                                     _ => {
@@ -349,7 +302,7 @@ impl Scanner {
                                         return self.make_token(
                                             TokenKind::Number(parsed_float),
                                             &digit_string,
-                                            sp,
+                                            pos,
                                         );
                                     }
                                 }
@@ -360,8 +313,7 @@ impl Scanner {
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
                                 &format!("Expected digit after decimal, found {}", c),
-                                sp.line,
-                                sp.column,
+                                pos,
                                 1,
                             );
                             return Err(report_string);
@@ -370,8 +322,7 @@ impl Scanner {
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
                                 "Expected digit after decimal, found EOF",
-                                sp.line,
-                                sp.column,
+                                pos,
                                 1,
                             );
                             return Err(report_string);
@@ -387,7 +338,7 @@ impl Scanner {
                             return Err(format!("Could not parse number: {}", e.to_string()));
                         }
                     };
-                    return self.make_token(TokenKind::Number(parsed_float), &digit_string, sp);
+                    return self.make_token(TokenKind::Number(parsed_float), &digit_string, pos);
                 }
                 None => return Ok(None),
             }
@@ -398,7 +349,7 @@ impl Scanner {
         &self,
         first_char: char,
         chars: &mut Peekable<Chars>,
-        sp: &mut ScanPosition,
+        pos: &mut Position,
     ) -> Result<Option<Token>, String> {
         let mut id_string = String::new();
         id_string.push(first_char);
@@ -409,18 +360,18 @@ impl Scanner {
                 // if if's alphanumeric, push onto the string
                 Some('0'..='9') | Some('a'..='z') | Some('A'..='Z') | Some('_') => {
                     id_string.push(*peeked.unwrap());
-                    self.advance(chars, sp);
+                    self.advance(chars, pos);
                 }
                 // anything else means end of the identifier
                 _ => {
                     // check for keywords
                     match TokenKind::get_keyword(&id_string) {
-                        Some(token_kind) => return self.make_token(token_kind, &id_string, sp),
+                        Some(token_kind) => return self.make_token(token_kind, &id_string, pos),
                         _ => {
                             return self.make_token(
                                 TokenKind::Identifier(id_string.clone()),
                                 &id_string,
-                                sp,
+                                pos,
                             );
                         }
                     }
@@ -433,8 +384,8 @@ impl Scanner {
         &self,
         kind: TokenKind,
         lexeme: &str,
-        sp: &ScanPosition,
+        pos: &Position,
     ) -> Result<Option<Token>, String> {
-        Ok(Some(Token::new(kind, lexeme, sp)))
+        Ok(Some(Token::new(kind, lexeme, pos)))
     }
 }

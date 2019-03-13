@@ -74,7 +74,7 @@ impl Lox {
         //     println!("{:?}", token);
         // }
 
-        let parser = Parser::new(tokens);
+        let parser = Parser::new(tokens, err_reporter);
         let expression = parser.parse()?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)

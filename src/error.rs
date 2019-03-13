@@ -1,7 +1,10 @@
+use crate::token::Position;
+
 pub trait Reporter {
-    fn report(&self, message: &str, line_num: u64, column: u64, _length: u64) -> String;
+    fn report(&self, message: &str, pos: &Position, _length: u64) -> String;
 }
 
+#[derive(Clone, Copy)]
 pub struct BasicReporter {}
 
 impl BasicReporter {
@@ -11,8 +14,8 @@ impl BasicReporter {
 }
 
 impl Reporter for BasicReporter {
-    fn report(&self, message: &str, line_num: u64, column: u64, _length: u64) -> String {
-        let error_report = format!("Error: {} [line {}:{}]", message, line_num, column);
+    fn report(&self, message: &str, pos: &Position, _length: u64) -> String {
+        let error_report = format!("Error: {} [line {}:{}]", message, pos.line, pos.column);
         eprintln!("{}", error_report);
         error_report
     }

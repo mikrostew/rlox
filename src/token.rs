@@ -1,6 +1,46 @@
 use std::fmt;
 
-use crate::scanner::ScanPosition;
+// keep track of current location
+#[derive(Clone)]
+pub struct Position {
+    // TODO: will need file path?
+    // current line number
+    pub line: u64,
+    // current column
+    pub column: u64,
+}
+
+impl Position {
+    pub fn new() -> Self {
+        Position {
+            // start at the beginning of everything
+            line: 1,
+            column: 0,
+        }
+    }
+
+    pub fn next_char(&mut self) {
+        self.column += 1;
+    }
+
+    pub fn next_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
+    }
+
+    pub fn adjust(&mut self, by_chars: u64) {
+        if by_chars > 0 {
+            self.column -= by_chars - 1;
+        }
+    }
+}
+
+// TODO: also Debug?
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
+    }
+}
 
 // the kind of token that was scanned
 #[derive(PartialEq, Clone)]
@@ -149,17 +189,17 @@ pub struct Token {
     // the raw characters from the input
     pub lexeme: String,
     // line and column where the token appears
-    pub position: ScanPosition,
+    pub position: Position,
     // length of the token
     pub length: u64,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: &str, sp: &ScanPosition) -> Self {
+    pub fn new(kind: TokenKind, lexeme: &str, pos: &Position) -> Self {
         let length = lexeme.len() as u64;
 
         // scan position is at the end of the scanned token, so adjust that accordingly
-        let mut position = sp.clone(); // TODO: this should not .clone() the borrow, just don't borrow
+        let mut position = pos.clone();
         position.adjust(length);
 
         Token {

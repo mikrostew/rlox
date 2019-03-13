@@ -2,26 +2,40 @@ use std::iter::Peekable;
 use std::slice::Iter;
 
 use crate::ast::{Expr, Literal};
-use crate::token::{Token, TokenKind};
+use crate::error::Reporter;
+use crate::token::{Position, Token, TokenKind};
 
 pub struct Parser {
+    // reporter that implements this trait
+    err_reporter: Box<Reporter>,
+    // how many errors the scanner encountered
+    num_errors: u64,
+    // the token stream from the scanner
     tokens: Vec<Token>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens }
+    pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
+        Parser {
+            tokens,
+            err_reporter: Box::new(err_reporter),
+            num_errors: 0,
+        }
     }
 
     pub fn parse(self) -> Result<Expr, String> {
         let mut tokens = self.tokens.iter().peekable();
 
         // TODO: right now this only does expressions (that will change later...)
-        self.expression(&mut tokens)
+        match self.expression(&mut tokens) {
+            Ok(expr) => Ok(expr),
+            Err(_) => Err(format!("Parser encountered {} errors", self.num_errors)),
+        }
     }
 
     // expression     → equality ;
     fn expression(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+        // TODO: error handling here?
         self.equality(tokens)
     }
 
@@ -95,10 +109,24 @@ impl Parser {
                     self.consume_or_err(tokens, TokenKind::RightParen, "Missing closing ')'")?;
                     Expr::Grouping(Box::new(expr))
                 }
-                _ => return Err(format!("Expected primary, got {}", token)),
+                // TODO: better description than 'primary'
+                _ => {
+                    let report_string = self.err_reporter.report(
+                        &format!("Expected primary, got `{}`", token),
+                        &token.position,
+                        1,
+                    );
+                    return Err(report_string);
+                }
             })
         } else {
-            Err("TODO: Ran out of tokens in primary()".to_string())
+            let report_string = self.err_reporter.report(
+                "ran out of tokens in primary()",
+                // TODO: report the position where we started parsing the expression
+                &Position::new(),
+                1,
+            );
+            return Err(report_string);
         }
     }
 
@@ -173,16 +201,17 @@ impl Parser {
         kind: TokenKind,
         err: &str,
     ) -> Result<Token, String> {
-        if let Some(token) = tokens.peek() {
+        if let Some(&token) = tokens.peek() {
             if token.kind == kind {
-                // consume the token
-                return tokens
+                // consume the token (already peeked so unwrap is ok)
+                return Ok(tokens
                     .next()
                     .cloned()
-                    .ok_or("consume() could not get next token for some reason".to_string());
+                    .expect("could not consume token after peeking"));
             }
         }
-        // TODO: need to have custom error things, with the token, maybe position, stuff like that
-        Err(err.to_string())
+        // TODO: position is end of file?
+        let report_string = self.err_reporter.report(err, &Position::new(), 1);
+        Err(report_string)
     }
 }
