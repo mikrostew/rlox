@@ -62,6 +62,7 @@ impl Parser {
         match self.expression(&mut tokens) {
             Ok(expr) => Ok(expr),
             Err(_) => {
+                // TODO: this should be calculated somewhere else?
                 self.num_errors += 1;
                 Err(format!("parser encountered {} error(s)", self.num_errors))
             }
@@ -166,5 +167,33 @@ impl Parser {
             self.err_reporter
                 .report(err, err, &err_token.position, err_token.length);
         Err(report_string)
+    }
+
+    // synchronize the parser to the beginning of a statement
+    fn synchronize(&self, tokens: &mut Peekable<Iter<Token>>) {
+        // go thru tokens until we find a semicolon, or the start of a statement
+
+        while let Some(&token) = tokens.peek() {
+            match token.kind {
+                // for ; consume that and assume we are synchronized on the next statement
+                TokenKind::Semicolon => {
+                    tokens.next();
+                    return;
+                }
+
+                // for the beginning of a statement, don't consume the token
+                TokenKind::Class
+                | TokenKind::For
+                | TokenKind::Fun
+                | TokenKind::If
+                | TokenKind::Print
+                | TokenKind::Return
+                | TokenKind::Var
+                | TokenKind::While => return,
+
+                // anything else keep going
+                _ => (),
+            }
+        }
     }
 }
