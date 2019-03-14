@@ -69,6 +69,13 @@ impl Parser {
         }
     }
 
+    // TODO: add:
+    //  * comma-separated expressions
+    //  * ternary operator: `a ? b : c`
+    //  * error productions for binary operators without a left-hand operand
+    //    (e.g. `<= 7`, or `== 4`)
+    // see http://www.craftinginterpreters.com/parsing-expressions.html#challenges
+
     // expression     → equality ;
     fn expression(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         // TODO: error handling here?
