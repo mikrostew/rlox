@@ -196,7 +196,11 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenKind, lexeme: &str, pos: &Position) -> Self {
-        let length = lexeme.len() as u64;
+        // exceptions for calculating the length
+        let length = match kind {
+            TokenKind::Eof => 1,
+            _ => lexeme.len() as u64,
+        };
 
         // scan position is at the end of the scanned token, so adjust that accordingly
         let mut position = pos.clone();
@@ -217,7 +221,7 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}[{}]", self.kind, self.lexeme)
+        write!(f, "{}", self.lexeme)
     }
 }
 

@@ -48,7 +48,7 @@ impl Scanner {
             }
         }
 
-        tokens.push(Token::new(TokenKind::Eof, "", &position));
+        tokens.push(Token::new(TokenKind::Eof, "EOF", &position));
 
         if self.num_errors > 0 {
             Err(format!("scanner encountered {} error(s)", self.num_errors))
@@ -153,6 +153,9 @@ impl Scanner {
                     self.make_token(TokenKind::Ignore, "", pos)
                 // '/* ... */' style comments
                 } else if self.match_next('*', chars, pos) {
+                    // keep track of where the comment started (for error reporting)
+                    let mut start_pos = pos.clone();
+                    start_pos.adjust(2);
                     // comment goes to the end of the line (or end of string)
                     loop {
                         match chars.peek() {
@@ -172,8 +175,8 @@ impl Scanner {
                                 let report_string = self.err_reporter.report(
                                     "unterminated block comment",
                                     "expected matching `*/`",
-                                    pos,
-                                    1,
+                                    &start_pos,
+                                    2,
                                 );
                                 return Err(report_string);
                             }
@@ -224,6 +227,9 @@ impl Scanner {
         chars: &mut Peekable<Chars>,
         pos: &mut Position,
     ) -> Result<Option<Token>, String> {
+        // keep track of start posiition (for error reporting)
+        let start_pos = pos.clone();
+
         let mut string_chars = String::new();
         loop {
             match chars.peek() {
@@ -248,9 +254,9 @@ impl Scanner {
                     // report and return error (no token created)
                     let report_string = self.err_reporter.report(
                         "unterminated string",
-                        "expected `\"`",
-                        pos,
-                        1, // length of single char is 1
+                        "expected closing `\"`",
+                        &start_pos,
+                        1 + string_chars.len() as u64, // string plus the first `"`
                     );
                     return Err(report_string);
                 }
@@ -266,6 +272,9 @@ impl Scanner {
     ) -> Result<Option<Token>, String> {
         let mut digit_string = String::new();
         digit_string.push(digit);
+
+        // save the start position for the token
+        let mut start_pos = pos.clone();
 
         loop {
             let peeked = chars.peek();
@@ -283,6 +292,7 @@ impl Scanner {
                     let peek_next = chars.peek();
                     match peek_next {
                         Some('0'..='9') => {
+                            // unwrap is ok because we just checked for Some()
                             digit_string.push(*peek_next.unwrap());
                             self.advance(chars, pos);
 
@@ -296,7 +306,8 @@ impl Scanner {
                                     }
                                     // if it's anything else, just return the token, finally
                                     _ => {
-                                        let parsed_float = self.parse_number(&digit_string, pos)?;
+                                        let parsed_float =
+                                            self.parse_number(&digit_string, &start_pos)?;
                                         return self.make_token(
                                             TokenKind::Number(parsed_float),
                                             &digit_string,
@@ -308,6 +319,8 @@ impl Scanner {
                         }
                         // anything other than a decimal is an error
                         Some(c) => {
+                            // report the right location
+                            pos.next_char();
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
                                 &format!("expected digit after decimal, found `{}`", c),
@@ -318,6 +331,8 @@ impl Scanner {
                             return Err(report_string);
                         }
                         None => {
+                            // report the right location
+                            pos.next_char();
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
                                 "expected digit after decimal, found EOF",
@@ -331,7 +346,7 @@ impl Scanner {
                 }
                 // anything else or EOF ends the number
                 Some(_) | None => {
-                    let parsed_float = self.parse_number(&digit_string, pos)?;
+                    let parsed_float = self.parse_number(&digit_string, &start_pos)?;
                     return self.make_token(TokenKind::Number(parsed_float), &digit_string, pos);
                 }
             }
@@ -340,12 +355,14 @@ impl Scanner {
 
     fn parse_number(&self, digit_string: &String, pos: &Position) -> Result<f64, String> {
         f64::from_str(&digit_string).map_err(|e| {
-            // TODO: position and length are wrong here
+            // figure out the right position and length
+            let length = digit_string.len() as u64;
+
             let report_string = self.err_reporter.report(
                 &format!("Could not parse number: {}", e.to_string()),
                 "could not parse",
                 pos,
-                1,
+                length,
             );
             report_string
         })

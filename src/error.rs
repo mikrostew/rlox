@@ -56,8 +56,12 @@ impl Reporter for BetterReporter {
         eprintln!("    |");
         eprintln!("{:>3} |  {}", line, self.source);
         eprintln!(
-            "    |  {:3$}{:4$} {}",
-            " ", "^", positional_msg, col as usize, length as usize
+            "    |  {:3$}{:^<4$} {}",
+            "",
+            "",
+            positional_msg,
+            (col - 1) as usize,
+            length as usize
         );
         eprintln!("");
 

@@ -87,28 +87,29 @@ impl Parser {
                 TokenKind::String(s) => Expr::Literal(Literal::String(s.to_string())),
                 TokenKind::LeftParen => {
                     let expr = self.expression(tokens)?;
-                    self.consume_or_err(tokens, TokenKind::RightParen, "Missing closing ')'")?;
+                    self.consume_or_err(
+                        tokens,
+                        TokenKind::RightParen,
+                        "missing closing `)`",
+                        &token,
+                    )?;
                     Expr::Grouping(Box::new(expr))
                 }
                 _ => {
                     let report_string = self.err_reporter.report(
-                        &format!(
-                            "unexpected token: expected literal or '(', found `{}`",
-                            token
-                        ),
-                        &format!("unexpected token"),
+                        &format!("expected literal or `(`, found `{}`", token),
+                        &format!("unexpected"),
                         &token.position,
-                        1,
+                        token.length,
                     );
                     return Err(report_string);
                 }
             })
         } else {
+            // TODO: this shouldn't happen, so maybe don't have this case?
             let report_string = self.err_reporter.report(
-                // TODO: better error messages
-                "ran out of tokens in primary()",
-                "ran out of tokens",
-                // TODO: report the position where we started parsing the expression
+                "expected literal or `(`, found nothing",
+                "expected literal",
                 &Position::new(),
                 1,
             );
@@ -186,6 +187,7 @@ impl Parser {
         tokens: &mut Peekable<Iter<Token>>,
         kind: TokenKind,
         err: &str,
+        err_token: &Token,
     ) -> Result<Token, String> {
         if let Some(&token) = tokens.peek() {
             if token.kind == kind {
@@ -197,8 +199,9 @@ impl Parser {
                     .expect("could not consume token after peeking"));
             }
         }
-        // TODO: position is end of file/source?
-        let report_string = self.err_reporter.report(err, err, &Position::new(), 1);
+        let report_string =
+            self.err_reporter
+                .report(err, err, &err_token.position, err_token.length);
         Err(report_string)
     }
 }
