@@ -52,7 +52,8 @@ impl Lox {
                         Ok(_) => (),
                         Err(e) => {
                             // print the error, but don't exit the interpreter
-                            eprintln!("Error: {}", e);
+                            eprintln!("error: {}", e);
+                            eprintln!("");
                         }
                     }
                 }

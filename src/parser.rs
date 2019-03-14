@@ -14,6 +14,21 @@ pub struct Parser {
     tokens: Vec<Token>,
 }
 
+// macro to remove the duplication for these functions
+// $a  → $b ( ( $match_ops ) $b )* ;
+macro_rules! binary_expr_parser {
+    ( $a:ident, $b:ident, $match_ops:ident ) => {
+        fn $a(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+            let mut expr = self.$b(tokens)?;
+            while let Some(operator) = Parser::$match_ops(tokens) {
+                let right = self.$b(tokens)?;
+                expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            }
+            Ok(expr)
+        }
+    }
+}
+
 impl Parser {
     pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
         Parser {
@@ -23,13 +38,16 @@ impl Parser {
         }
     }
 
-    pub fn parse(self) -> Result<Expr, String> {
+    pub fn parse(mut self) -> Result<Expr, String> {
         let mut tokens = self.tokens.iter().peekable();
 
         // TODO: right now this only does expressions (that will change later...)
         match self.expression(&mut tokens) {
             Ok(expr) => Ok(expr),
-            Err(_) => Err(format!("Parser encountered {} errors", self.num_errors)),
+            Err(_) => {
+                self.num_errors += 1;
+                Err(format!("parser encountered {} error(s)", self.num_errors))
+            }
         }
     }
 
@@ -39,51 +57,14 @@ impl Parser {
         self.equality(tokens)
     }
 
-    // TODO: can possibly macro-ize a lot of these, they're very similar
-
     // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        let mut expr = self.comparison(tokens)?;
-
-        while let Some(operator) = Parser::match_equality_op(tokens) {
-            let right = self.comparison(tokens)?;
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
-        }
-        Ok(expr)
-    }
-
+    binary_expr_parser!(equality, comparison, match_equality_op);
     // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-    fn comparison(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        let mut expr = self.addition(tokens)?;
-
-        while let Some(operator) = Parser::match_comparison_op(tokens) {
-            let right = self.addition(tokens)?;
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
-        }
-        Ok(expr)
-    }
-
+    binary_expr_parser!(comparison, addition, match_comparison_op);
     // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
-    fn addition(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        let mut expr = self.multiplication(tokens)?;
-
-        while let Some(operator) = Parser::match_addition_op(tokens) {
-            let right = self.multiplication(tokens)?;
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
-        }
-        Ok(expr)
-    }
-
+    binary_expr_parser!(addition, multiplication, match_addition_op);
     // multiplication → unary ( ( "/" | "*" ) unary )* ;
-    fn multiplication(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        let mut expr = self.unary(tokens)?;
-
-        while let Some(operator) = Parser::match_multiplication_op(tokens) {
-            let right = self.unary(tokens)?;
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
-        }
-        Ok(expr)
-    }
+    binary_expr_parser!(multiplication, unary, match_multiplication_op);
 
     // unary          → ( "!" | "-" ) unary | primary ;
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {

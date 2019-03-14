@@ -51,7 +51,7 @@ impl Scanner {
         tokens.push(Token::new(TokenKind::Eof, "", &position));
 
         if self.num_errors > 0 {
-            Err(format!("Scanner encountered {} errors", self.num_errors))
+            Err(format!("scanner encountered {} error(s)", self.num_errors))
         } else {
             Ok(tokens)
         }
