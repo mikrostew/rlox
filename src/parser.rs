@@ -88,6 +88,16 @@ impl Parser {
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(operator) = Parser::match_unary_op(tokens) {
             let right = self.unary(tokens)?;
+            // error production: check for things like `+123`, which is not supported
+            if operator.kind == TokenKind::Plus {
+                let report_string = self.err_reporter.report(
+                    &format!("unary `+` expressions are not supported"),
+                    &format!("help: remove this `+`"),
+                    &operator.position,
+                    operator.length,
+                );
+                return Err(report_string);
+            }
             return Ok(Expr::Unary(operator, Box::new(right)));
         }
 
@@ -143,8 +153,8 @@ impl Parser {
     match_op!(match_addition_op, Plus, Minus);
     // if the next token is '*' or '/', return it
     match_op!(match_multiplication_op, Star, Slash);
-    // if the next token is '!' or '-', return it
-    match_op!(match_unary_op, Bang, Minus);
+    // if the next token is '!', '-', or '+', return it
+    match_op!(match_unary_op, Bang, Minus, Plus);
 
     fn consume_or_err(
         &self,
