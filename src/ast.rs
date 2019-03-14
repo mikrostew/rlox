@@ -1,4 +1,4 @@
-use crate::token::Token;
+use std::fmt;
 
 // for this grammar:
 //
@@ -14,15 +14,64 @@ use crate::token::Token;
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
 
 pub enum Expr {
-    Binary(Box<Expr>, Token, Box<Expr>),
+    Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
     Literal(Literal),
-    Unary(Token, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
 }
 
 impl Expr {
-    fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
         visitor.visit_expr(self)
+    }
+}
+
+// so that the matching for this can be restricted
+#[derive(PartialEq)]
+pub enum UnaryOp {
+    Minus,
+    Bang,
+}
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let op = match self {
+            UnaryOp::Minus => "-",
+            UnaryOp::Bang => "!",
+        };
+        write!(f, "{}", op)
+    }
+}
+
+// so that the matching for this can be restricted
+pub enum BinaryOp {
+    BangEqual,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let op = match self {
+            BinaryOp::BangEqual => "!=",
+            BinaryOp::EqualEqual => "==",
+            BinaryOp::Greater => ">",
+            BinaryOp::GreaterEqual => ">=",
+            BinaryOp::Less => "<",
+            BinaryOp::LessEqual => "<=",
+            BinaryOp::Plus => "+",
+            BinaryOp::Minus => "-",
+            BinaryOp::Star => "*",
+            BinaryOp::Slash => "/",
+        };
+        write!(f, "{}", op)
     }
 }
 
@@ -34,11 +83,12 @@ pub enum Literal {
 }
 
 impl Literal {
-    fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
         visitor.visit_literal(self)
     }
 }
 
+// TODO: these methods need to return Result<>
 pub trait Visitor<T> {
     fn visit_expr(&self, e: &Expr) -> T;
     fn visit_literal(&self, l: &Literal) -> T;
@@ -65,7 +115,7 @@ impl Visitor<String> for AstPrinter {
             }
             Expr::Grouping(ref expr) => format!("({})", expr.accept(self)),
             Expr::Literal(lit) => lit.accept(self),
-            Expr::Unary(token, ref expr) => format!("({} {})", token, expr.accept(self)),
+            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self)),
         }
     }
 

@@ -3,6 +3,7 @@ use std::process::exit;
 
 mod ast;
 mod error;
+mod interpreter;
 mod lox;
 mod parser;
 mod scanner;

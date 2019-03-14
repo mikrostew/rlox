@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::ast::{Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
 use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
@@ -28,14 +28,14 @@ macro_rules! binary_expr_parser {
     }
 }
 
-// if the next token is one of the $kind list, return it
+// if the next token is one of the $kind list, return the matching $opkind::$kind
 macro_rules! match_op {
-    ( $a:ident, $($kind:ident),* ) => {
-        fn $a(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
+    ( $a:ident, $opkind:ident, $($kind:ident),* ) => {
+        fn $a(tokens: &mut Peekable<Iter<Token>>) -> Option<$opkind> {
             if let Some(token) = tokens.peek() {
                 match token.kind {
                     $(
-                        TokenKind::$kind => tokens.next().cloned(),
+                        TokenKind::$kind => Some($opkind::$kind),
                     )*
                     _ => None,
                 }
@@ -95,16 +95,6 @@ impl Parser {
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(operator) = Parser::match_unary_op(tokens) {
             let right = self.unary(tokens)?;
-            // error production: check for things like `+123`, which is not supported
-            if operator.kind == TokenKind::Plus {
-                let report_string = self.err_reporter.report(
-                    &format!("unary `+` expressions are not supported"),
-                    &format!("help: remove this `+`"),
-                    &operator.position,
-                    operator.length,
-                );
-                return Err(report_string);
-            }
             return Ok(Expr::Unary(operator, Box::new(right)));
         }
 
@@ -153,15 +143,22 @@ impl Parser {
     }
 
     // if the next token is '!=' or '==', return it
-    match_op!(match_equality_op, BangEqual, EqualEqual);
+    match_op!(match_equality_op, BinaryOp, BangEqual, EqualEqual);
     // if the next token is '>', '>=', '<' or '<=', return it
-    match_op!(match_comparison_op, Greater, GreaterEqual, Less, LessEqual);
+    match_op!(
+        match_comparison_op,
+        BinaryOp,
+        Greater,
+        GreaterEqual,
+        Less,
+        LessEqual
+    );
     // if the next token is '+' or '-', return it
-    match_op!(match_addition_op, Plus, Minus);
+    match_op!(match_addition_op, BinaryOp, Plus, Minus);
     // if the next token is '*' or '/', return it
-    match_op!(match_multiplication_op, Star, Slash);
-    // if the next token is '!', '-', or '+', return it
-    match_op!(match_unary_op, Bang, Minus, Plus);
+    match_op!(match_multiplication_op, BinaryOp, Star, Slash);
+    // if the next token is '!' or '-', return it
+    match_op!(match_unary_op, UnaryOp, Bang, Minus);
 
     fn consume_or_err(
         &self,
