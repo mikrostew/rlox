@@ -35,7 +35,7 @@ macro_rules! match_op {
             if let Some(token) = tokens.peek() {
                 match token.kind {
                     $(
-                        TokenKind::$kind => Some($opkind::$kind),
+                        TokenKind::$kind => tokens.next().cloned().map(|t| $opkind::$kind(t)),
                     )*
                     _ => None,
                 }

@@ -90,19 +90,21 @@ impl Visitor<Object> for Interpreter {
 
                 Ok(match op {
                     // equality
-                    BinaryOp::BangEqual => Object::Bool(left != right),
-                    BinaryOp::EqualEqual => Object::Bool(left == right),
+                    BinaryOp::BangEqual(_) => Object::Bool(left != right),
+                    BinaryOp::EqualEqual(_) => Object::Bool(left == right),
                     // comparison
-                    BinaryOp::Greater => Object::Bool(left.as_number()? > right.as_number()?),
-                    BinaryOp::GreaterEqual => Object::Bool(left.as_number()? >= right.as_number()?),
-                    BinaryOp::Less => Object::Bool(left.as_number()? < right.as_number()?),
-                    BinaryOp::LessEqual => Object::Bool(left.as_number()? <= right.as_number()?),
+                    BinaryOp::Greater(_) => Object::Bool(left.as_number()? > right.as_number()?),
+                    BinaryOp::GreaterEqual(_) => {
+                        Object::Bool(left.as_number()? >= right.as_number()?)
+                    }
+                    BinaryOp::Less(_) => Object::Bool(left.as_number()? < right.as_number()?),
+                    BinaryOp::LessEqual(_) => Object::Bool(left.as_number()? <= right.as_number()?),
                     // arithmetic or concat
-                    BinaryOp::Plus => add_or_concat(left, right)?,
+                    BinaryOp::Plus(_) => add_or_concat(left, right)?,
                     // arithmetic
-                    BinaryOp::Minus => Object::Number(left.as_number()? - right.as_number()?),
-                    BinaryOp::Star => Object::Number(left.as_number()? * right.as_number()?),
-                    BinaryOp::Slash => Object::Number(left.as_number()? / right.as_number()?),
+                    BinaryOp::Minus(_) => Object::Number(left.as_number()? - right.as_number()?),
+                    BinaryOp::Star(_) => Object::Number(left.as_number()? * right.as_number()?),
+                    BinaryOp::Slash(_) => Object::Number(left.as_number()? / right.as_number()?),
                 })
             }
             // for a group, evaluate the inner expression
@@ -112,8 +114,8 @@ impl Visitor<Object> for Interpreter {
             Expr::Unary(op, ref expr) => {
                 let right = self.evaluate(expr)?;
                 Ok(match op {
-                    UnaryOp::Minus => Object::Number(-right.as_number()?),
-                    UnaryOp::Bang => Object::Bool(!right.is_truthy()),
+                    UnaryOp::Minus(_) => Object::Number(-right.as_number()?),
+                    UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
         }

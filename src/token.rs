@@ -1,7 +1,7 @@
 use std::fmt;
 
 // keep track of current location
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Position {
     // TODO: will need file path?
     // current line number
@@ -183,7 +183,7 @@ impl TokenKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     // the raw characters from the input

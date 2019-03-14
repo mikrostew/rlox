@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::token::Token;
+
 // for this grammar:
 //
 // expression → literal | unary | binary | grouping ;
@@ -29,15 +31,15 @@ impl Expr {
 // so that the matching for this can be restricted
 #[derive(PartialEq)]
 pub enum UnaryOp {
-    Minus,
-    Bang,
+    Minus(Token),
+    Bang(Token),
 }
 
 impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let op = match self {
-            UnaryOp::Minus => "-",
-            UnaryOp::Bang => "!",
+            UnaryOp::Minus(_) => "-",
+            UnaryOp::Bang(_) => "!",
         };
         write!(f, "{}", op)
     }
@@ -45,31 +47,31 @@ impl fmt::Display for UnaryOp {
 
 // so that the matching for this can be restricted
 pub enum BinaryOp {
-    BangEqual,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    Plus,
-    Minus,
-    Star,
-    Slash,
+    BangEqual(Token),
+    EqualEqual(Token),
+    Greater(Token),
+    GreaterEqual(Token),
+    Less(Token),
+    LessEqual(Token),
+    Plus(Token),
+    Minus(Token),
+    Star(Token),
+    Slash(Token),
 }
 
 impl fmt::Display for BinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let op = match self {
-            BinaryOp::BangEqual => "!=",
-            BinaryOp::EqualEqual => "==",
-            BinaryOp::Greater => ">",
-            BinaryOp::GreaterEqual => ">=",
-            BinaryOp::Less => "<",
-            BinaryOp::LessEqual => "<=",
-            BinaryOp::Plus => "+",
-            BinaryOp::Minus => "-",
-            BinaryOp::Star => "*",
-            BinaryOp::Slash => "/",
+            BinaryOp::BangEqual(_) => "!=",
+            BinaryOp::EqualEqual(_) => "==",
+            BinaryOp::Greater(_) => ">",
+            BinaryOp::GreaterEqual(_) => ">=",
+            BinaryOp::Less(_) => "<",
+            BinaryOp::LessEqual(_) => "<=",
+            BinaryOp::Plus(_) => "+",
+            BinaryOp::Minus(_) => "-",
+            BinaryOp::Star(_) => "*",
+            BinaryOp::Slash(_) => "/",
         };
         write!(f, "{}", op)
     }
