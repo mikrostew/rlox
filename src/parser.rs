@@ -14,7 +14,6 @@ pub struct Parser {
     tokens: Vec<Token>,
 }
 
-// macro to remove the duplication for these functions
 // $a  → $b ( ( $match_ops ) $b )* ;
 macro_rules! binary_expr_parser {
     ( $a:ident, $b:ident, $match_ops:ident ) => {
@@ -27,6 +26,24 @@ macro_rules! binary_expr_parser {
             Ok(expr)
         }
     }
+}
+
+// if the next token is one of the $kind list, return it
+macro_rules! match_op {
+    ( $a:ident, $($kind:ident),* ) => {
+        fn $a(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
+            if let Some(token) = tokens.peek() {
+                match token.kind {
+                    $(
+                        TokenKind::$kind => tokens.next().cloned(),
+                    )*
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+    };
 }
 
 impl Parser {
@@ -117,70 +134,16 @@ impl Parser {
         }
     }
 
-    // TODO: can probably macro-ize these, they're so similar
-
     // if the next token is '!=' or '==', return it
-    fn match_equality_op(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
-        if let Some(token) = tokens.peek() {
-            match token.kind {
-                TokenKind::BangEqual | TokenKind::EqualEqual => tokens.next().cloned(),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
+    match_op!(match_equality_op, BangEqual, EqualEqual);
     // if the next token is '>', '>=', '<' or '<=', return it
-    fn match_comparison_op(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
-        if let Some(token) = tokens.peek() {
-            match token.kind {
-                TokenKind::Greater
-                | TokenKind::GreaterEqual
-                | TokenKind::Less
-                | TokenKind::LessEqual => tokens.next().cloned(),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
+    match_op!(match_comparison_op, Greater, GreaterEqual, Less, LessEqual);
     // if the next token is '+' or '-', return it
-    fn match_addition_op(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
-        if let Some(token) = tokens.peek() {
-            match token.kind {
-                TokenKind::Plus | TokenKind::Minus => tokens.next().cloned(),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
+    match_op!(match_addition_op, Plus, Minus);
     // if the next token is '*' or '/', return it
-    fn match_multiplication_op(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
-        if let Some(token) = tokens.peek() {
-            match token.kind {
-                TokenKind::Slash | TokenKind::Star => tokens.next().cloned(),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
+    match_op!(match_multiplication_op, Star, Slash);
     // if the next token is '!' or '-', return it
-    fn match_unary_op(tokens: &mut Peekable<Iter<Token>>) -> Option<Token> {
-        if let Some(token) = tokens.peek() {
-            match token.kind {
-                TokenKind::Bang | TokenKind::Minus => tokens.next().cloned(),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
+    match_op!(match_unary_op, Bang, Minus);
 
     fn consume_or_err(
         &self,

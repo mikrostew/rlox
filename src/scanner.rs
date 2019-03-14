@@ -274,7 +274,7 @@ impl Scanner {
         digit_string.push(digit);
 
         // save the start position for the token
-        let mut start_pos = pos.clone();
+        let start_pos = pos.clone();
 
         loop {
             let peeked = chars.peek();
