@@ -21,7 +21,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
         visitor.visit_expr(self)
     }
 }
@@ -83,15 +83,14 @@ pub enum Literal {
 }
 
 impl Literal {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> T {
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
         visitor.visit_literal(self)
     }
 }
 
-// TODO: these methods need to return Result<>
 pub trait Visitor<T> {
-    fn visit_expr(&self, e: &Expr) -> T;
-    fn visit_literal(&self, l: &Literal) -> T;
+    fn visit_expr(&self, e: &Expr) -> Result<T, String>;
+    fn visit_literal(&self, l: &Literal) -> Result<T, String>;
 }
 
 // actually use the visitor pattern to sort-of pretty-print the AST
@@ -102,29 +101,32 @@ impl AstPrinter {
         AstPrinter {}
     }
 
-    pub fn print(&self, expr: Expr) -> String {
+    pub fn print(&self, expr: &Expr) -> Result<String, String> {
         expr.accept(self)
     }
 }
 
 impl Visitor<String> for AstPrinter {
-    fn visit_expr(&self, e: &Expr) -> String {
-        match e {
-            Expr::Binary(ref expr1, token, ref expr2) => {
-                format!("({} {} {})", expr1.accept(self), token, expr2.accept(self))
-            }
-            Expr::Grouping(ref expr) => format!("({})", expr.accept(self)),
-            Expr::Literal(lit) => lit.accept(self),
-            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self)),
-        }
+    fn visit_expr(&self, e: &Expr) -> Result<String, String> {
+        Ok(match e {
+            Expr::Binary(ref expr1, token, ref expr2) => format!(
+                "({} {} {})",
+                expr1.accept(self)?,
+                token,
+                expr2.accept(self)?
+            ),
+            Expr::Grouping(ref expr) => format!("({})", expr.accept(self)?),
+            Expr::Literal(lit) => lit.accept(self)?,
+            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self)?),
+        })
     }
 
-    fn visit_literal(&self, l: &Literal) -> String {
-        match l {
+    fn visit_literal(&self, l: &Literal) -> Result<String, String> {
+        Ok(match l {
             Literal::Bool(b) => b.to_string(),
             Literal::Nil => "nil".to_string(),
             Literal::Number(num) => format!("{}", num),
             Literal::String(s) => s.clone(),
-        }
+        })
     }
 }

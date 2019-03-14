@@ -5,6 +5,7 @@ use std::process::exit;
 
 use crate::ast::AstPrinter;
 use crate::error;
+use crate::interpreter::Interpreter;
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 
@@ -89,7 +90,13 @@ impl Lox {
         // TODO: add this as a command line option (--show-ast or --debug-ast)
         let ast_printer = AstPrinter::new();
         println!("ast:");
-        println!("{}", ast_printer.print(expression));
+        println!("{}", ast_printer.print(&expression)?);
+        println!("");
+
+        // TODO: error reporter for this
+        let interpreter = Interpreter::new();
+        println!("result:");
+        interpreter.interpret(expression)?;
         println!("");
 
         Ok(())
