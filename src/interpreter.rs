@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::ast::{BinaryOp, Expr, Literal, UnaryOp, Visitor};
-use crate::token::Token;
+use crate::token::Position;
 
 // because lox is dynamically typed, we need something to store any possible types
 #[derive(PartialEq)]
@@ -23,23 +23,17 @@ impl Object {
         }
     }
 
-    pub fn as_number(self, t: &Token) -> Result<f64, String> {
+    pub fn as_number(self, pos: &Position) -> Result<f64, String> {
         match self {
             Object::Number(n) => Ok(n),
-            _ => Err(format!(
-                "[{}] operand must be a number, got {}",
-                t.position, self
-            )),
+            _ => Err(format!("[{}] operand must be a number, got {}", pos, self)),
         }
     }
 
-    pub fn as_string(self, t: &Token) -> Result<String, String> {
+    pub fn as_string(self, pos: &Position) -> Result<String, String> {
         match self {
             Object::String(s) => Ok(s),
-            _ => Err(format!(
-                "[{}] operand must be a string, got {}",
-                t.position, self
-            )),
+            _ => Err(format!("[{}] operand must be a string, got {}", pos, self)),
         }
     }
 }
@@ -73,15 +67,15 @@ impl Interpreter {
     }
 }
 
-fn add_or_concat(left: Object, right: Object, t: &Token) -> Result<Object, String> {
+fn add_or_concat(left: Object, right: Object, pos: &Position) -> Result<Object, String> {
     // decide based on the left-hand operand
     Ok(match left {
-        Object::Number(n) => Object::Number(n + right.as_number(t)?),
-        Object::String(s) => Object::String(s + &right.as_string(t)?),
+        Object::Number(n) => Object::Number(n + right.as_number(pos)?),
+        Object::String(s) => Object::String(s + &right.as_string(pos)?),
         _ => {
             return Err(format!(
-                "[{}] operands must be numbers or strings",
-                t.position
+                "[{}] operands to `+` must be numbers or strings",
+                pos
             ));
         }
     })
@@ -99,20 +93,30 @@ impl Visitor<Object> for Interpreter {
                     BinaryOp::BangEqual(_) => Object::Bool(left != right),
                     BinaryOp::EqualEqual(_) => Object::Bool(left == right),
                     // comparison
-                    BinaryOp::Greater(t) => Object::Bool(left.as_number(t)? > right.as_number(t)?),
-                    BinaryOp::GreaterEqual(t) => {
-                        Object::Bool(left.as_number(t)? >= right.as_number(t)?)
+                    BinaryOp::Greater(pos) => {
+                        Object::Bool(left.as_number(pos)? > right.as_number(pos)?)
                     }
-                    BinaryOp::Less(t) => Object::Bool(left.as_number(t)? < right.as_number(t)?),
-                    BinaryOp::LessEqual(t) => {
-                        Object::Bool(left.as_number(t)? <= right.as_number(t)?)
+                    BinaryOp::GreaterEqual(pos) => {
+                        Object::Bool(left.as_number(pos)? >= right.as_number(pos)?)
+                    }
+                    BinaryOp::Less(pos) => {
+                        Object::Bool(left.as_number(pos)? < right.as_number(pos)?)
+                    }
+                    BinaryOp::LessEqual(pos) => {
+                        Object::Bool(left.as_number(pos)? <= right.as_number(pos)?)
                     }
                     // arithmetic or concat
-                    BinaryOp::Plus(t) => add_or_concat(left, right, t)?,
+                    BinaryOp::Plus(pos) => add_or_concat(left, right, pos)?,
                     // arithmetic
-                    BinaryOp::Minus(t) => Object::Number(left.as_number(t)? - right.as_number(t)?),
-                    BinaryOp::Star(t) => Object::Number(left.as_number(t)? * right.as_number(t)?),
-                    BinaryOp::Slash(t) => Object::Number(left.as_number(t)? / right.as_number(t)?),
+                    BinaryOp::Minus(pos) => {
+                        Object::Number(left.as_number(pos)? - right.as_number(pos)?)
+                    }
+                    BinaryOp::Star(pos) => {
+                        Object::Number(left.as_number(pos)? * right.as_number(pos)?)
+                    }
+                    BinaryOp::Slash(pos) => {
+                        Object::Number(left.as_number(pos)? / right.as_number(pos)?)
+                    }
                 })
             }
             // for a group, evaluate the inner expression
@@ -122,7 +126,7 @@ impl Visitor<Object> for Interpreter {
             Expr::Unary(op, ref expr) => {
                 let right = self.evaluate(expr)?;
                 Ok(match op {
-                    UnaryOp::Minus(t) => Object::Number(-right.as_number(t)?),
+                    UnaryOp::Minus(pos) => Object::Number(-right.as_number(pos)?),
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }

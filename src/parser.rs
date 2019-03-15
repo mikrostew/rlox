@@ -29,13 +29,14 @@ macro_rules! binary_expr_parser {
 }
 
 // if the next token is one of the $kind list, return the matching $opkind::$kind
+// (including the position, to track for errors)
 macro_rules! match_op {
     ( $a:ident, $opkind:ident, $($kind:ident),* ) => {
         fn $a(tokens: &mut Peekable<Iter<Token>>) -> Option<$opkind> {
             if let Some(token) = tokens.peek() {
                 match token.kind {
                     $(
-                        TokenKind::$kind => tokens.next().cloned().map(|t| $opkind::$kind(t)),
+                        TokenKind::$kind => tokens.next().map(|t| $opkind::$kind(t.position.clone())),
                     )*
                     _ => None,
                 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::token::Token;
+use crate::token::Position;
 
 // for this grammar:
 //
@@ -31,8 +31,8 @@ impl Expr {
 // so that the matching for this can be restricted
 #[derive(PartialEq)]
 pub enum UnaryOp {
-    Minus(Token),
-    Bang(Token),
+    Minus(Position),
+    Bang(Position),
 }
 
 impl fmt::Display for UnaryOp {
@@ -47,16 +47,16 @@ impl fmt::Display for UnaryOp {
 
 // so that the matching for this can be restricted
 pub enum BinaryOp {
-    BangEqual(Token),
-    EqualEqual(Token),
-    Greater(Token),
-    GreaterEqual(Token),
-    Less(Token),
-    LessEqual(Token),
-    Plus(Token),
-    Minus(Token),
-    Star(Token),
-    Slash(Token),
+    BangEqual(Position),
+    EqualEqual(Position),
+    Greater(Position),
+    GreaterEqual(Position),
+    Less(Position),
+    LessEqual(Position),
+    Plus(Position),
+    Minus(Position),
+    Star(Position),
+    Slash(Position),
 }
 
 impl fmt::Display for BinaryOp {
