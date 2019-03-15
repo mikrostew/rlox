@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::ast::{BinaryOp, Expr, Literal, UnaryOp, Visitor};
+use crate::token::Token;
 
 // because lox is dynamically typed, we need something to store any possible types
 #[derive(PartialEq)]
@@ -22,17 +23,23 @@ impl Object {
         }
     }
 
-    pub fn as_number(self) -> Result<f64, String> {
+    pub fn as_number(self, t: &Token) -> Result<f64, String> {
         match self {
             Object::Number(n) => Ok(n),
-            _ => Err("Can't convert this stuff to a number".to_string()),
+            _ => Err(format!(
+                "[{}] operand must be a number, got {}",
+                t.position, self
+            )),
         }
     }
 
-    pub fn as_string(self) -> Result<String, String> {
+    pub fn as_string(self, t: &Token) -> Result<String, String> {
         match self {
             Object::String(s) => Ok(s),
-            _ => Err("Can't convert this stuff to a string".to_string()),
+            _ => Err(format!(
+                "[{}] operand must be a string, got {}",
+                t.position, self
+            )),
         }
     }
 }
@@ -43,7 +50,7 @@ impl fmt::Display for Object {
             Object::Bool(b) => write!(f, "{}", b),
             Object::Nil => write!(f, "nil"),
             Object::Number(n) => write!(f, "{}", n),
-            Object::String(s) => write!(f, "{}", s),
+            Object::String(s) => write!(f, "\"{}\"", s),
         }
     }
 }
@@ -64,20 +71,19 @@ impl Interpreter {
     fn evaluate(&self, expr: &Box<Expr>) -> Result<Object, String> {
         expr.accept(self)
     }
-
-    fn error(&self, error_msg: &str) -> Result<String, String> {
-        println!("Runtime Error: {}", error_msg);
-        // TODO: actually report the error
-        Err(error_msg.to_string())
-    }
 }
 
-fn add_or_concat(left: Object, right: Object) -> Result<Object, String> {
+fn add_or_concat(left: Object, right: Object, t: &Token) -> Result<Object, String> {
     // decide based on the left-hand operand
     Ok(match left {
-        Object::Number(n) => Object::Number(n + right.as_number()?),
-        Object::String(s) => Object::String(s + &right.as_string()?),
-        _ => return Err("can't add or concat this stuff".to_string()),
+        Object::Number(n) => Object::Number(n + right.as_number(t)?),
+        Object::String(s) => Object::String(s + &right.as_string(t)?),
+        _ => {
+            return Err(format!(
+                "[{}] operands must be numbers or strings",
+                t.position
+            ));
+        }
     })
 }
 
@@ -93,18 +99,20 @@ impl Visitor<Object> for Interpreter {
                     BinaryOp::BangEqual(_) => Object::Bool(left != right),
                     BinaryOp::EqualEqual(_) => Object::Bool(left == right),
                     // comparison
-                    BinaryOp::Greater(_) => Object::Bool(left.as_number()? > right.as_number()?),
-                    BinaryOp::GreaterEqual(_) => {
-                        Object::Bool(left.as_number()? >= right.as_number()?)
+                    BinaryOp::Greater(t) => Object::Bool(left.as_number(t)? > right.as_number(t)?),
+                    BinaryOp::GreaterEqual(t) => {
+                        Object::Bool(left.as_number(t)? >= right.as_number(t)?)
                     }
-                    BinaryOp::Less(_) => Object::Bool(left.as_number()? < right.as_number()?),
-                    BinaryOp::LessEqual(_) => Object::Bool(left.as_number()? <= right.as_number()?),
+                    BinaryOp::Less(t) => Object::Bool(left.as_number(t)? < right.as_number(t)?),
+                    BinaryOp::LessEqual(t) => {
+                        Object::Bool(left.as_number(t)? <= right.as_number(t)?)
+                    }
                     // arithmetic or concat
-                    BinaryOp::Plus(_) => add_or_concat(left, right)?,
+                    BinaryOp::Plus(t) => add_or_concat(left, right, t)?,
                     // arithmetic
-                    BinaryOp::Minus(_) => Object::Number(left.as_number()? - right.as_number()?),
-                    BinaryOp::Star(_) => Object::Number(left.as_number()? * right.as_number()?),
-                    BinaryOp::Slash(_) => Object::Number(left.as_number()? / right.as_number()?),
+                    BinaryOp::Minus(t) => Object::Number(left.as_number(t)? - right.as_number(t)?),
+                    BinaryOp::Star(t) => Object::Number(left.as_number(t)? * right.as_number(t)?),
+                    BinaryOp::Slash(t) => Object::Number(left.as_number(t)? / right.as_number(t)?),
                 })
             }
             // for a group, evaluate the inner expression
@@ -114,7 +122,7 @@ impl Visitor<Object> for Interpreter {
             Expr::Unary(op, ref expr) => {
                 let right = self.evaluate(expr)?;
                 Ok(match op {
-                    UnaryOp::Minus(_) => Object::Number(-right.as_number()?),
+                    UnaryOp::Minus(t) => Object::Number(-right.as_number(t)?),
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
