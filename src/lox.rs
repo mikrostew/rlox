@@ -21,10 +21,13 @@ impl Lox {
         let script_contents =
             fs::read_to_string(path).expect(&format!("Could not read input file {}", path));
         let mut lox = Lox::new();
-        match lox.run(&script_contents) {
+        // TODO: error reporter for this
+        let interpreter = Interpreter::new();
+        match lox.run(&script_contents, &interpreter) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("Error: {}", e);
+                // for runtime error, exit with code 70
                 exit(65);
             }
         }
@@ -33,6 +36,8 @@ impl Lox {
     // Run interactively, taking in one line of input at a time and running it (like a REPL)
     pub fn run_prompt() {
         let mut lox = Lox::new();
+        // TODO: error reporter for this
+        let interpreter = Interpreter::new();
         // user has to hit ^C to get out of this loop
         loop {
             let mut input = String::new();
@@ -49,7 +54,7 @@ impl Lox {
                 Ok(_n) => {
                     // println!("{} bytes read", _n);
                     let trimmed = input.trim();
-                    match lox.run(trimmed) {
+                    match lox.run(trimmed, &interpreter) {
                         Ok(_) => (),
                         Err(e) => {
                             // print the error, but don't exit the interpreter
@@ -67,7 +72,7 @@ impl Lox {
     }
 
     // Run the input text
-    fn run(&mut self, source: &str) -> Result<(), String> {
+    fn run(&mut self, source: &str, interpreter: &Interpreter) -> Result<(), String> {
         // TODO: add debug command line option
         println!("run() on source: `{}`", source);
         println!("");
@@ -93,8 +98,6 @@ impl Lox {
         println!("{}", ast_printer.print(&expression)?);
         println!("");
 
-        // TODO: error reporter for this
-        let interpreter = Interpreter::new();
         println!("result:");
         interpreter.interpret(expression)?;
         println!("");
