@@ -29,7 +29,8 @@ impl Position {
     }
 
     pub fn adjust(&mut self, by_chars: u64) {
-        if by_chars > 0 {
+        // TODO: implement some kind of wrap-back for multiline stuff?
+        if by_chars > 0 && self.column >= (by_chars - 1) {
             self.column -= by_chars - 1;
         }
     }

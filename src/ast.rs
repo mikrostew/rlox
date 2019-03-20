@@ -2,7 +2,12 @@ use std::fmt;
 
 use crate::token::Position;
 
-// for this grammar:
+// AST for this grammar:
+//
+// program    → statement* EOF ;
+// statement  → exprStmt | printStmt ;
+// exprStmt   → expression ";" ;
+// printStmt  → "print" expression ";" ;
 //
 // expression → literal | unary | binary | grouping ;
 //
@@ -15,6 +20,19 @@ use crate::token::Position;
 // for some ideas on visitor pattern in Rust, see:
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
 
+pub enum Stmt {
+    Expression(Box<Expr>),
+    Print(Box<Expr>),
+}
+
+impl Stmt {
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
+        visitor.visit_stmt(self)
+    }
+}
+
+// TODO: all of these should implement some kind of "Position" trait, so that they have a
+// .position() method which gives the line, col, and length (for error reporting niceness)
 pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
@@ -91,6 +109,7 @@ impl Literal {
 }
 
 pub trait Visitor<T> {
+    fn visit_stmt(&self, e: &Stmt) -> Result<T, String>;
     fn visit_expr(&self, e: &Expr) -> Result<T, String>;
     fn visit_literal(&self, l: &Literal) -> Result<T, String>;
 }
@@ -103,12 +122,23 @@ impl AstPrinter {
         AstPrinter {}
     }
 
-    pub fn print(&self, expr: &Expr) -> Result<String, String> {
-        expr.accept(self)
+    pub fn print(&self, statements: &Vec<Stmt>) -> Result<String, String> {
+        let mut ret_string = String::new();
+        for s in statements {
+            ret_string += &s.accept(self)?;
+        }
+        Ok(ret_string)
     }
 }
 
 impl Visitor<String> for AstPrinter {
+    fn visit_stmt(&self, stmt: &Stmt) -> Result<String, String> {
+        Ok(match stmt {
+            Stmt::Print(ref expr) => format!("print {};", expr.accept(self)?),
+            Stmt::Expression(ref expr) => format!("{};", expr.accept(self)?),
+        })
+    }
+
     fn visit_expr(&self, e: &Expr) -> Result<String, String> {
         Ok(match e {
             Expr::Binary(ref expr1, token, ref expr2) => format!(

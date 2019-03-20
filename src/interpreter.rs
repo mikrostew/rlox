@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::{BinaryOp, Expr, Literal, UnaryOp, Visitor};
+use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp, Visitor};
 use crate::token::Position;
 
 // because lox is dynamically typed, we need something to store any possible types
@@ -56,14 +56,25 @@ impl Interpreter {
         Interpreter {}
     }
 
-    pub fn interpret(&self, expr: Expr) -> Result<(), String> {
-        let value = self.evaluate(&Box::new(expr))?;
-        println!("{}", value);
+    pub fn interpret(&self, statements: Vec<Stmt>) -> Result<(), String> {
+        for stmt in statements {
+            match self.execute(stmt) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("Runtime Error:");
+                    eprintln!("{}", e);
+                }
+            }
+        }
         Ok(())
     }
 
     fn evaluate(&self, expr: &Box<Expr>) -> Result<Object, String> {
         expr.accept(self)
+    }
+
+    fn execute(&self, stmt: Stmt) -> Result<Object, String> {
+        stmt.accept(self)
     }
 }
 
@@ -82,6 +93,19 @@ fn add_or_concat(left: Object, right: Object, pos: &Position) -> Result<Object, 
 }
 
 impl Visitor<Object> for Interpreter {
+    fn visit_stmt(&self, stmt: &Stmt) -> Result<Object, String> {
+        match stmt {
+            Stmt::Expression(ref expr) => {
+                self.evaluate(expr)?;
+            }
+            Stmt::Print(ref expr) => {
+                let value = self.evaluate(expr)?;
+                println!("{}", value);
+            }
+        }
+        Ok(Object::Nil)
+    }
+
     fn visit_expr(&self, e: &Expr) -> Result<Object, String> {
         match e {
             Expr::Binary(ref expr1, op, ref expr2) => {

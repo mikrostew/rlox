@@ -44,7 +44,12 @@ impl BetterReporter {
 impl Reporter for BetterReporter {
     fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position, length: u64) -> String {
         let line = pos.line;
-        let col = pos.column;
+        let mut col = pos.column;
+
+        // TODO: to prevent accidental subtraction panic later on
+        if col <= 0 {
+            col = 1;
+        }
 
         eprintln!("error: {}", error_msg);
         // TODO: include file name from Position

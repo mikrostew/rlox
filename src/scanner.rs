@@ -237,7 +237,7 @@ impl Scanner {
                     self.advance(chars, pos);
                     return self.make_token(
                         TokenKind::String(string_chars.clone()),
-                        &format!("\"{}\"", string_chars),
+                        &format!("{}", string_chars),
                         pos,
                     );
                 }

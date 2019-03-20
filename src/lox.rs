@@ -90,16 +90,16 @@ impl Lox {
 
         let err_reporter2 = error::BetterReporter::new(source.to_string());
         let parser = Parser::new(tokens, err_reporter2);
-        let expression = parser.parse()?;
+        let statements = parser.parse()?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)
         let ast_printer = AstPrinter::new();
         println!("ast:");
-        println!("{}", ast_printer.print(&expression)?);
+        println!("{}", ast_printer.print(&statements)?);
         println!("");
 
         println!("result:");
-        interpreter.interpret(expression)?;
+        interpreter.interpret(statements)?;
         println!("");
 
         Ok(())

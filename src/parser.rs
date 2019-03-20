@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp};
 use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
@@ -14,7 +14,7 @@ pub struct Parser {
     tokens: Vec<Token>,
 }
 
-// $a  → $b ( ( $match_ops ) $b )* ;
+// $a → $b ( ( $match_ops ) $b )* ;
 macro_rules! binary_expr_parser {
     ( $a:ident, $b:ident, $match_ops:ident ) => {
         fn $a(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
@@ -56,17 +56,28 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self) -> Result<Expr, String> {
+    pub fn parse(mut self) -> Result<Vec<Stmt>, String> {
+        let mut statements = Vec::new();
         let mut tokens = self.tokens.iter().peekable();
 
-        // TODO: right now this only does expressions (that will change later...)
-        match self.expression(&mut tokens) {
-            Ok(expr) => Ok(expr),
-            Err(_) => {
-                // TODO: this should be calculated somewhere else?
-                self.num_errors += 1;
-                Err(format!("parser encountered {} error(s)", self.num_errors))
+        // program   → statement* EOF ;
+        loop {
+            match self.statement(&mut tokens) {
+                Ok(stmt) => match stmt {
+                    Some(s) => statements.push(s),
+                    None => break,
+                },
+                Err(_) => {
+                    // TODO: need to do error recovery here?
+                    self.num_errors += 1;
+                }
             }
+        }
+
+        if self.num_errors > 0 {
+            Err(format!("parser encountered {} error(s)", self.num_errors))
+        } else {
+            Ok(statements)
         }
     }
 
@@ -77,22 +88,76 @@ impl Parser {
     //    (e.g. `<= 7`, or `== 4`)
     // see http://www.craftinginterpreters.com/parsing-expressions.html#challenges
 
-    // expression     → equality ;
+    // statement → exprStmt | printStmt ;
+    fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
+        if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::Print => {
+                    // consume the token and parse the print statement
+                    tokens.next();
+                    Ok(Some(self.print_statement(tokens)?))
+                }
+                // TODO: going to add the other ones
+                // once we hit EOF, that's the end of the statements
+                TokenKind::Eof => Ok(None),
+                _ => {
+                    // doesn't match anything else, so assume expression
+                    Ok(Some(self.expression_statement(tokens)?))
+                }
+            }
+        } else {
+            // no more tokens, no more statements
+            Ok(None)
+        }
+    }
+
+    // printStmt → "print" expression ";" ;
+    fn print_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        let value = self.expression(tokens)?;
+        // TODO: this should really be the position of the expression itself
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::Semicolon,
+            "expected `;` at end of statement",
+            &todo_token,
+        )?;
+        Ok(Stmt::Print(Box::new(value)))
+    }
+
+    // exprStmt  → expression ";" ;
+    fn expression_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        let expr = self.expression(tokens)?;
+        // TODO: see same thing above
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::Semicolon,
+            "expected `;` at end of statement",
+            &todo_token,
+        )?;
+        Ok(Stmt::Expression(Box::new(expr)))
+    }
+
+    // expression → equality ;
     fn expression(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         // TODO: error handling here?
         self.equality(tokens)
     }
 
-    // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+    // equality → comparison ( ( "!=" | "==" ) comparison )* ;
     binary_expr_parser!(equality, comparison, match_equality_op);
-    // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+
+    // comparison → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
     binary_expr_parser!(comparison, addition, match_comparison_op);
-    // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
+
+    // addition → multiplication ( ( "-" | "+" ) multiplication )* ;
     binary_expr_parser!(addition, multiplication, match_addition_op);
+
     // multiplication → unary ( ( "/" | "*" ) unary )* ;
     binary_expr_parser!(multiplication, unary, match_multiplication_op);
 
-    // unary          → ( "!" | "-" ) unary | primary ;
+    // unary → ( "!" | "-" ) unary | primary ;
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(operator) = Parser::match_unary_op(tokens) {
             let right = self.unary(tokens)?;
@@ -143,8 +208,9 @@ impl Parser {
         }
     }
 
-    // if the next token is '!=' or '==', return it
+    // if the next token is '!=' or '==', return the equivalent BinaryOp
     match_op!(match_equality_op, BinaryOp, BangEqual, EqualEqual);
+
     // if the next token is '>', '>=', '<' or '<=', return it
     match_op!(
         match_comparison_op,
@@ -154,13 +220,18 @@ impl Parser {
         Less,
         LessEqual
     );
-    // if the next token is '+' or '-', return it
+
+    // if the next token is '+' or '-', return the equivalent BinaryOp
     match_op!(match_addition_op, BinaryOp, Plus, Minus);
-    // if the next token is '*' or '/', return it
+
+    // if the next token is '*' or '/', return the equivalent BinaryOp
     match_op!(match_multiplication_op, BinaryOp, Star, Slash);
-    // if the next token is '!' or '-', return it
+
+    // if the next token is '!' or '-', return the equivalent UnaryOp
     match_op!(match_unary_op, UnaryOp, Bang, Minus);
 
+    // TODO: this should take a Position instead of an err_token Token
+    // (and position should include length)
     fn consume_or_err(
         &self,
         tokens: &mut Peekable<Iter<Token>>,
