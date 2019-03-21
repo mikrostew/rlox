@@ -134,8 +134,8 @@ impl AstPrinter {
 impl Visitor<String> for AstPrinter {
     fn visit_stmt(&self, stmt: &Stmt) -> Result<String, String> {
         Ok(match stmt {
-            Stmt::Print(ref expr) => format!("print {};", expr.accept(self)?),
-            Stmt::Expression(ref expr) => format!("{};", expr.accept(self)?),
+            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self)?),
+            Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self)?),
         })
     }
 
@@ -158,7 +158,7 @@ impl Visitor<String> for AstPrinter {
             Literal::Bool(b) => b.to_string(),
             Literal::Nil => "nil".to_string(),
             Literal::Number(num) => format!("{}", num),
-            Literal::String(s) => s.clone(),
+            Literal::String(s) => format!("\"{}\"", s),
         })
     }
 }

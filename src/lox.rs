@@ -73,20 +73,25 @@ impl Lox {
 
     // Run the input text
     fn run(&mut self, source: &str, interpreter: &Interpreter) -> Result<(), String> {
-        // TODO: add debug command line option
-        println!("run() on source: `{}`", source);
+        // TODO: add debug command line option --debug-source
+        println!("source:");
+        println!("```");
+        println!("{}", source);
+        println!("```");
         println!("");
+
         // TODO: creating 2 reporters here, but not sure how else to do this at the moment
         // (because they would share the same string on the heap, which doesn't work)
         let err_reporter1 = error::BetterReporter::new(source.to_string());
         let scanner = Scanner::new(source.to_string(), err_reporter1);
         let tokens = scanner.scan_tokens()?;
+
         // TODO: add this as a command line option (--show-tokens or --debug-tokens)
-        println!("tokens:");
-        for token in &tokens {
-            println!("{:?}", token);
-        }
-        println!("");
+        // println!("tokens:");
+        // for token in &tokens {
+        //     println!("{:?}", token);
+        // }
+        // println!("");
 
         let err_reporter2 = error::BetterReporter::new(source.to_string());
         let parser = Parser::new(tokens, err_reporter2);

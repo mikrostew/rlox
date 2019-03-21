@@ -44,7 +44,7 @@ impl fmt::Display for Object {
             Object::Bool(b) => write!(f, "{}", b),
             Object::Nil => write!(f, "nil"),
             Object::Number(n) => write!(f, "{}", n),
-            Object::String(s) => write!(f, "\"{}\"", s),
+            Object::String(s) => write!(f, "{}", s),
         }
     }
 }

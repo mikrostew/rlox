@@ -1,0 +1,7 @@
+// print basic expressions
+print "one";
+print 2+17;
+print nil;
+print true == false;
+
+// global variable
