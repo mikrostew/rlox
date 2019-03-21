@@ -80,16 +80,16 @@ impl Parser {
         let mut statements = Vec::new();
         let mut tokens = self.tokens.iter().peekable();
 
-        // program   → statement* EOF ;
+        // program → declaration* EOF ;
         loop {
-            match self.statement(&mut tokens) {
+            match self.declaration(&mut tokens) {
                 Ok(stmt) => match stmt {
                     Some(s) => statements.push(s),
                     None => break,
                 },
                 Err(_) => {
-                    // TODO: need to do error recovery here?
                     self.num_errors += 1;
+                    self.synchronize(&mut tokens);
                 }
             }
         }
@@ -107,6 +107,61 @@ impl Parser {
     //  * error productions for binary operators without a left-hand operand
     //    (e.g. `<= 7`, or `== 4`)
     // see http://www.craftinginterpreters.com/parsing-expressions.html#challenges
+
+    // declaration → var_decl | statement ;
+    fn declaration(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
+        if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::Var => {
+                    // consume the token and parse the var declaration
+                    tokens.next();
+                    Ok(Some(self.var_declaration(tokens)?))
+                }
+                // TODO: going to add the other ones
+                // once we hit EOF, that's the end of the statements
+                TokenKind::Eof => Ok(None),
+                // doesn't match anything else, so assume statement
+                _ => self.statement(tokens),
+            }
+        } else {
+            // no more tokens, no more statements
+            Ok(None)
+        }
+    }
+
+    // var_decl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    fn var_declaration(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        // TODO: this should really be the position of the expression/declaration itself
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        let name = self.consume_or_err(
+            tokens,
+            TokenKind::Identifier("".to_string()),
+            "expected variable name",
+            &todo_token,
+        )?;
+
+        // assume nil unless an expression is given
+        let mut initializer = Expr::Literal(Literal::Nil);
+
+        // TODO: there should be a match() function (like in the book) to do these 3 lines
+        if let Some(token) = tokens.peek() {
+            if token.kind == TokenKind::Equal {
+                tokens.next();
+                initializer = self.expression(tokens)?;
+            }
+        }
+
+        // TODO: this should really be the position of the expression/declaration itself
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::Semicolon,
+            "expected `;` after variable declaration",
+            &todo_token,
+        )?;
+
+        Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
+    }
 
     // statement → expr_stmt | print_stmt ;
     fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
@@ -187,7 +242,7 @@ impl Parser {
         self.primary(tokens)
     }
 
-    // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" ;
+    // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
     fn primary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(token) = tokens.next() {
             Ok(match &token.kind {
@@ -206,6 +261,7 @@ impl Parser {
                     )?;
                     Expr::Grouping(Box::new(expr))
                 }
+                TokenKind::Identifier(s) => Expr::Variable(s.to_string()),
                 _ => {
                     let report_string = self.err_reporter.report(
                         &format!("expected literal or `(`, found `{}`", token),
@@ -250,6 +306,7 @@ impl Parser {
     // if the next token is '!' or '-', return the equivalent UnaryOp
     match_op!(match_unary_op, UnaryOp, Bang, Minus);
 
+    // consume the specified token and return it, or report the input error and return that
     // TODO: this should take a Position instead of an err_token Token
     // (and position should include length)
     fn consume_or_err(
@@ -260,13 +317,31 @@ impl Parser {
         err_token: &Token,
     ) -> Result<Token, String> {
         if let Some(&token) = tokens.peek() {
-            if token.kind == kind {
-                // consume the token (already peeked so unwrap is ok)
-                return Ok(tokens
-                    .next()
-                    .cloned()
-                    // TODO: parser should not panic (this should be an error)
-                    .expect("could not consume token after peeking"));
+            match kind {
+                // TODO
+                // TokenKind::String(_) => {
+                // }
+                // TokenKind::Number(_) => {
+                // }
+                TokenKind::Identifier(_) => {
+                    if let TokenKind::Identifier(_s) = &token.kind {
+                        // consume and return the token (already peeked so expect should be ok)
+                        return Ok(tokens
+                            .next()
+                            .cloned()
+                            .expect("could not consume token after peeking"));
+                    }
+                }
+                _ => {
+                    if token.kind == kind {
+                        // consume and return the token (already peeked so expect should be ok)
+                        return Ok(tokens
+                            .next()
+                            .cloned()
+                            // TODO: parser should not panic (this should be an error)
+                            .expect("could not consume token after peeking"));
+                    }
+                }
             }
         }
         let report_string =
@@ -297,8 +372,10 @@ impl Parser {
                 | TokenKind::Var
                 | TokenKind::While => return,
 
-                // anything else keep going
-                _ => (),
+                // anything else consume the token and keep going
+                _ => {
+                    tokens.next();
+                }
             }
         }
     }

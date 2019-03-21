@@ -22,8 +22,8 @@ impl Lox {
             fs::read_to_string(path).expect(&format!("Could not read input file {}", path));
         let mut lox = Lox::new();
         // TODO: error reporter for this
-        let interpreter = Interpreter::new();
-        match lox.run(&script_contents, &interpreter) {
+        let mut interpreter = Interpreter::new();
+        match lox.run(&script_contents, &mut interpreter) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("Error: {}", e);
@@ -37,7 +37,7 @@ impl Lox {
     pub fn run_prompt() {
         let mut lox = Lox::new();
         // TODO: error reporter for this
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::new();
         // user has to hit ^C to get out of this loop
         loop {
             let mut input = String::new();
@@ -54,7 +54,7 @@ impl Lox {
                 Ok(_n) => {
                     // println!("{} bytes read", _n);
                     let trimmed = input.trim();
-                    match lox.run(trimmed, &interpreter) {
+                    match lox.run(trimmed, &mut interpreter) {
                         Ok(_) => (),
                         Err(e) => {
                             // print the error, but don't exit the interpreter
@@ -72,7 +72,7 @@ impl Lox {
     }
 
     // Run the input text
-    fn run(&mut self, source: &str, interpreter: &Interpreter) -> Result<(), String> {
+    fn run(&mut self, source: &str, interpreter: &mut Interpreter) -> Result<(), String> {
         // TODO: add debug command line option --debug-source
         println!("source:");
         println!("```");
@@ -98,7 +98,7 @@ impl Lox {
         let statements = parser.parse()?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)
-        let ast_printer = AstPrinter::new();
+        let mut ast_printer = AstPrinter::new();
         println!("ast:");
         println!("{}", ast_printer.print(&statements)?);
         println!("");

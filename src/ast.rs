@@ -29,10 +29,11 @@ use crate::token::Position;
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),
+    Var(String, Box<Expr>), // name, initializer
 }
 
 impl Stmt {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
+    pub fn accept<T>(&self, visitor: &mut impl Visitor<T>) -> Result<T, String> {
         visitor.visit_stmt(self)
     }
 }
@@ -44,6 +45,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Literal(Literal),
     Unary(UnaryOp, Box<Expr>),
+    Variable(String), // name
 }
 
 impl Expr {
@@ -115,7 +117,7 @@ impl Literal {
 }
 
 pub trait Visitor<T> {
-    fn visit_stmt(&self, e: &Stmt) -> Result<T, String>;
+    fn visit_stmt(&mut self, e: &Stmt) -> Result<T, String>;
     fn visit_expr(&self, e: &Expr) -> Result<T, String>;
     fn visit_literal(&self, l: &Literal) -> Result<T, String>;
 }
@@ -128,7 +130,7 @@ impl AstPrinter {
         AstPrinter {}
     }
 
-    pub fn print(&self, statements: &Vec<Stmt>) -> Result<String, String> {
+    pub fn print(&mut self, statements: &Vec<Stmt>) -> Result<String, String> {
         let mut ret_string = String::new();
         for s in statements {
             ret_string += &s.accept(self)?;
@@ -138,10 +140,11 @@ impl AstPrinter {
 }
 
 impl Visitor<String> for AstPrinter {
-    fn visit_stmt(&self, stmt: &Stmt) -> Result<String, String> {
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<String, String> {
         Ok(match stmt {
             Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self)?),
             Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self)?),
+            Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self)?),
         })
     }
 
@@ -156,6 +159,7 @@ impl Visitor<String> for AstPrinter {
             Expr::Grouping(ref expr) => format!("({})", expr.accept(self)?),
             Expr::Literal(lit) => lit.accept(self)?,
             Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self)?),
+            Expr::Variable(name) => format!("{}", name),
         })
     }
 

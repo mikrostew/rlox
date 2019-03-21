@@ -1,11 +1,12 @@
 use std::fmt;
 
 use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp, Visitor};
+use crate::environment::Environment;
 use crate::token::Position;
 
 // because lox is dynamically typed, we need something to store any possible types
-#[derive(PartialEq)]
-enum Object {
+#[derive(PartialEq, Clone)]
+pub enum Object {
     Bool(bool),
     Nil,
     Number(f64),
@@ -49,14 +50,18 @@ impl fmt::Display for Object {
     }
 }
 
-pub struct Interpreter;
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter {}
+        Interpreter {
+            environment: Environment::new(),
+        }
     }
 
-    pub fn interpret(&self, statements: Vec<Stmt>) -> Result<(), String> {
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), String> {
         for stmt in statements {
             match self.execute(stmt) {
                 Ok(_) => (),
@@ -73,7 +78,7 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn execute(&self, stmt: Stmt) -> Result<Object, String> {
+    fn execute(&mut self, stmt: Stmt) -> Result<Object, String> {
         stmt.accept(self)
     }
 }
@@ -93,7 +98,7 @@ fn add_or_concat(left: Object, right: Object, pos: &Position) -> Result<Object, 
 }
 
 impl Visitor<Object> for Interpreter {
-    fn visit_stmt(&self, stmt: &Stmt) -> Result<Object, String> {
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<Object, String> {
         match stmt {
             Stmt::Expression(ref expr) => {
                 self.evaluate(expr)?;
@@ -101,6 +106,11 @@ impl Visitor<Object> for Interpreter {
             Stmt::Print(ref expr) => {
                 let value = self.evaluate(expr)?;
                 println!("{}", value);
+            }
+            Stmt::Var(name, ref expr) => {
+                // variable declaration
+                let value = self.evaluate(expr)?;
+                self.environment.define(name, value);
             }
         }
         Ok(Object::Nil)
@@ -154,6 +164,7 @@ impl Visitor<Object> for Interpreter {
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
+            Expr::Variable(name) => self.environment.get(name),
         }
     }
 

@@ -2,6 +2,7 @@ use std::env;
 use std::process::exit;
 
 mod ast;
+mod environment;
 mod error;
 mod interpreter;
 mod lox;

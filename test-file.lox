@@ -5,7 +5,7 @@ print nil;
 print true == false;
 
 // global variable
-var beverage = "espresso";
 var not_initialized;
-print beverage;
 print not_initialized;
+var beverage = "espresso";
+print beverage;
