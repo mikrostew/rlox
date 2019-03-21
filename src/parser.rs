@@ -47,6 +47,26 @@ macro_rules! match_op {
     };
 }
 
+// Parser for this grammar:
+//
+// program        → declaration* EOF ;
+//
+// declaration    → var_decl | statement ;
+//
+// var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
+//
+// statement      → expr_stmt | print_stmt ;
+//
+// expr_stmt      → expression ";" ;
+// print_stmt      → "print" expression ";" ;
+//
+// expression     → equality ;
+// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+// comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+// addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
+// multiplication → unary ( ( "/" | "*" ) unary )* ;
+// unary          → ( "!" | "-" ) unary | primary ;
+// primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
 impl Parser {
     pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
         Parser {
@@ -88,7 +108,7 @@ impl Parser {
     //    (e.g. `<= 7`, or `== 4`)
     // see http://www.craftinginterpreters.com/parsing-expressions.html#challenges
 
-    // statement → exprStmt | printStmt ;
+    // statement → expr_stmt | print_stmt ;
     fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
             match token.kind {
@@ -111,7 +131,7 @@ impl Parser {
         }
     }
 
-    // printStmt → "print" expression ";" ;
+    // print_stmt → "print" expression ";" ;
     fn print_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
         let value = self.expression(tokens)?;
         // TODO: this should really be the position of the expression itself
@@ -125,7 +145,7 @@ impl Parser {
         Ok(Stmt::Print(Box::new(value)))
     }
 
-    // exprStmt  → expression ";" ;
+    // expr_stmt → expression ";" ;
     fn expression_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
         let expr = self.expression(tokens)?;
         // TODO: see same thing above
@@ -167,7 +187,7 @@ impl Parser {
         self.primary(tokens)
     }
 
-    // primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" ;
+    // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" ;
     fn primary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(token) = tokens.next() {
             Ok(match &token.kind {

@@ -4,18 +4,24 @@ use crate::token::Position;
 
 // AST for this grammar:
 //
-// program    → statement* EOF ;
-// statement  → exprStmt | printStmt ;
-// exprStmt   → expression ";" ;
-// printStmt  → "print" expression ";" ;
+// program        → declaration* EOF ;
 //
-// expression → literal | unary | binary | grouping ;
+// declaration    → var_decl | statement ;
 //
-// literal    → NUMBER | STRING | "true" | "false" | "nil" ;
-// grouping   → "(" expression ")" ;
-// unary      → ( "-" | "!" ) expression ;
-// binary     → expression operator expression ;
-// operator   → "==" | "!=" | "<" | "<=" | ">" | ">=" | "+"  | "-"  | "*" | "/" ;
+// var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
+//
+// statement      → expr_stmt | print_stmt ;
+//
+// expr_stmt      → expression ";" ;
+// print_stmt      → "print" expression ";" ;
+//
+// expression     → equality ;
+// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+// comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+// addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
+// multiplication → unary ( ( "/" | "*" ) unary )* ;
+// unary          → ( "!" | "-" ) unary | primary ;
+// primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
 
 // for some ideas on visitor pattern in Rust, see:
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
