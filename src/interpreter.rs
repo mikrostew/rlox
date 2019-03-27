@@ -51,6 +51,7 @@ impl fmt::Display for Object {
 }
 
 pub struct Interpreter {
+    // the global environment of the interpreter
     environment: Environment,
 }
 
