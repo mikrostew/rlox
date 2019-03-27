@@ -74,7 +74,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&self, expr: &Box<Expr>) -> Result<Object, String> {
+    fn evaluate(&mut self, expr: &Box<Expr>) -> Result<Object, String> {
         expr.accept(self)
     }
 
@@ -109,6 +109,7 @@ impl Visitor<Object> for Interpreter {
             }
             Stmt::Var(name, ref expr) => {
                 // variable declaration
+                // evaluate the value and assign to the new variable
                 let value = self.evaluate(expr)?;
                 self.environment.define(name, value);
             }
@@ -116,8 +117,15 @@ impl Visitor<Object> for Interpreter {
         Ok(Object::Nil)
     }
 
-    fn visit_expr(&self, e: &Expr) -> Result<Object, String> {
+    fn visit_expr(&mut self, e: &Expr) -> Result<Object, String> {
         match e {
+            Expr::Assign(var_name, ref expr) => {
+                // variable assignment
+                // evaluate the value and assign to the variable, returning the value
+                let value = self.evaluate(expr)?;
+                self.environment.assign(var_name, value.clone())?;
+                Ok(value)
+            }
             Expr::Binary(ref expr1, op, ref expr2) => {
                 let left = self.evaluate(expr1)?;
                 let right = self.evaluate(expr2)?;

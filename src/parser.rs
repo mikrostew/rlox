@@ -58,9 +58,10 @@ macro_rules! match_op {
 // statement      → expr_stmt | print_stmt ;
 //
 // expr_stmt      → expression ";" ;
-// print_stmt      → "print" expression ";" ;
+// print_stmt     → "print" expression ";" ;
 //
-// expression     → equality ;
+// expression     → assignment ;
+// assignment     → IDENTIFIER "=" assignment | equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -214,10 +215,46 @@ impl Parser {
         Ok(Stmt::Expression(Box::new(expr)))
     }
 
-    // expression → equality ;
+    // expression → assignment ;
     fn expression(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        // TODO: error handling here?
-        self.equality(tokens)
+        // TODO
+        self.assignment(tokens)
+    }
+
+    fn assignment(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+        // parse the l-value (left hand side of assignment, or just an expression),
+        // which at this point for assignment should just be an identifier
+        let l_value = self.equality(tokens)?;
+
+        // TODO: there should be a match() function (like in the book) to do these 3 lines
+        if let Some(token) = tokens.peek() {
+            if token.kind == TokenKind::Equal {
+                // if it's an equal, consume it but save for possible err reporting
+                let equal = tokens.next().unwrap();
+
+                // parse the r-value (right hand side of assignment)
+                let r_value = self.assignment(tokens)?;
+
+                // check left hand side is valid assignment target
+                match l_value {
+                    Expr::Variable(name) => {
+                        return Ok(Expr::Assign(name.clone(), Box::new(r_value)));
+                    }
+                    _ => {
+                        let report_string = self.err_reporter.report(
+                            "invalid assignment target",
+                            "for this assignment",
+                            &equal.position,
+                            equal.length,
+                        );
+                        return Err(report_string);
+                    }
+                }
+            }
+        }
+
+        // not an assignment, just return the expression
+        Ok(l_value)
     }
 
     // equality → comparison ( ( "!=" | "==" ) comparison )* ;

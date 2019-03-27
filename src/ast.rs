@@ -13,9 +13,10 @@ use crate::token::Position;
 // statement      → expr_stmt | print_stmt ;
 //
 // expr_stmt      → expression ";" ;
-// print_stmt      → "print" expression ";" ;
+// print_stmt     → "print" expression ";" ;
 //
-// expression     → equality ;
+// expression     → assignment ;
+// assignment     → IDENTIFIER "=" assignment | equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -41,6 +42,7 @@ impl Stmt {
 // TODO: all of these should implement some kind of "Position" trait, so that they have a
 // .position() method which gives the line, col, and length (for error reporting niceness)
 pub enum Expr {
+    Assign(String, Box<Expr>), // name, value
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
     Literal(Literal),
@@ -49,7 +51,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
+    pub fn accept<T>(&self, visitor: &mut impl Visitor<T>) -> Result<T, String> {
         visitor.visit_expr(self)
     }
 }
@@ -118,7 +120,7 @@ impl Literal {
 
 pub trait Visitor<T> {
     fn visit_stmt(&mut self, e: &Stmt) -> Result<T, String>;
-    fn visit_expr(&self, e: &Expr) -> Result<T, String>;
+    fn visit_expr(&mut self, e: &Expr) -> Result<T, String>;
     fn visit_literal(&self, l: &Literal) -> Result<T, String>;
 }
 
@@ -148,8 +150,9 @@ impl Visitor<String> for AstPrinter {
         })
     }
 
-    fn visit_expr(&self, e: &Expr) -> Result<String, String> {
+    fn visit_expr(&mut self, e: &Expr) -> Result<String, String> {
         Ok(match e {
+            Expr::Assign(var_name, ref expr) => format!("{} = {}", var_name, expr.accept(self)?,),
             Expr::Binary(ref expr1, token, ref expr2) => format!(
                 "({} {} {})",
                 expr1.accept(self)?,

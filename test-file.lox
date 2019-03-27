@@ -9,3 +9,7 @@ var not_initialized;
 print not_initialized;
 var beverage = "espresso";
 print beverage;
+
+// assignment
+not_initialized = "hot " + beverage;
+print not_initialized;
