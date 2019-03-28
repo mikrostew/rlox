@@ -1,5 +1,7 @@
 use std::fmt;
+use std::rc::Rc;
 
+use crate::environment::Environment;
 use crate::token::Position;
 
 // AST for this grammar:
@@ -10,10 +12,11 @@ use crate::token::Position;
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
-// statement      → expr_stmt | print_stmt ;
+// statement      → expr_stmt | print_stmt | block ;
 //
 // expr_stmt      → expression ";" ;
 // print_stmt     → "print" expression ";" ;
+// block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment | equality ;
@@ -28,14 +31,19 @@ use crate::token::Position;
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
 
 pub enum Stmt {
+    Block(Vec<Stmt>),
     Expression(Box<Expr>),
     Print(Box<Expr>),
     Var(String, Box<Expr>), // name, initializer
 }
 
 impl Stmt {
-    pub fn accept<T>(&self, visitor: &mut impl Visitor<T>) -> Result<T, String> {
-        visitor.visit_stmt(self)
+    pub fn accept<T>(
+        &self,
+        visitor: &mut impl Visitor<T>,
+        env: &Rc<Environment>,
+    ) -> Result<T, String> {
+        visitor.visit_stmt(self, env)
     }
 }
 
@@ -51,8 +59,12 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn accept<T>(&self, visitor: &mut impl Visitor<T>) -> Result<T, String> {
-        visitor.visit_expr(self)
+    pub fn accept<T>(
+        &self,
+        visitor: &mut impl Visitor<T>,
+        env: &Rc<Environment>,
+    ) -> Result<T, String> {
+        visitor.visit_expr(self, env)
     }
 }
 
@@ -113,15 +125,15 @@ pub enum Literal {
 }
 
 impl Literal {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>) -> Result<T, String> {
-        visitor.visit_literal(self)
+    pub fn accept<T>(&self, visitor: &impl Visitor<T>, env: &Rc<Environment>) -> Result<T, String> {
+        visitor.visit_literal(self, env)
     }
 }
 
 pub trait Visitor<T> {
-    fn visit_stmt(&mut self, e: &Stmt) -> Result<T, String>;
-    fn visit_expr(&mut self, e: &Expr) -> Result<T, String>;
-    fn visit_literal(&self, l: &Literal) -> Result<T, String>;
+    fn visit_stmt(&mut self, e: &Stmt, env: &Rc<Environment>) -> Result<T, String>;
+    fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<T, String>;
+    fn visit_literal(&self, l: &Literal, env: &Rc<Environment>) -> Result<T, String>;
 }
 
 // actually use the visitor pattern to sort-of pretty-print the AST
@@ -134,39 +146,53 @@ impl AstPrinter {
 
     pub fn print(&mut self, statements: &Vec<Stmt>) -> Result<String, String> {
         let mut ret_string = String::new();
+        let environment = Environment::new(None);
         for s in statements {
-            ret_string += &s.accept(self)?;
+            ret_string += &s.accept(self, &environment)?;
         }
         Ok(ret_string)
     }
 }
 
 impl Visitor<String> for AstPrinter {
-    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<String, String> {
+    fn visit_stmt(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match stmt {
-            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self)?),
-            Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self)?),
-            Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self)?),
+            Stmt::Block(statements) => {
+                if statements.len() == 0 {
+                    "{}".to_string()
+                } else {
+                    let mut formatted_stmts = String::new();
+                    for statement in statements {
+                        formatted_stmts.push_str(&statement.accept(self, env)?);
+                    }
+                    format!("{{\n{}}}\n", formatted_stmts)
+                }
+            }
+            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self, env)?),
+            Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self, env)?),
+            Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self, env)?),
         })
     }
 
-    fn visit_expr(&mut self, e: &Expr) -> Result<String, String> {
+    fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match e {
-            Expr::Assign(var_name, ref expr) => format!("{} = {}", var_name, expr.accept(self)?,),
+            Expr::Assign(var_name, ref expr) => {
+                format!("{} = {}", var_name, expr.accept(self, env)?,)
+            }
             Expr::Binary(ref expr1, token, ref expr2) => format!(
                 "({} {} {})",
-                expr1.accept(self)?,
+                expr1.accept(self, env)?,
                 token,
-                expr2.accept(self)?
+                expr2.accept(self, env)?
             ),
-            Expr::Grouping(ref expr) => format!("({})", expr.accept(self)?),
-            Expr::Literal(lit) => lit.accept(self)?,
-            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self)?),
+            Expr::Grouping(ref expr) => format!("({})", expr.accept(self, env)?),
+            Expr::Literal(lit) => lit.accept(self, env)?,
+            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self, env)?),
             Expr::Variable(name) => format!("{}", name),
         })
     }
 
-    fn visit_literal(&self, l: &Literal) -> Result<String, String> {
+    fn visit_literal(&self, l: &Literal, _env: &Rc<Environment>) -> Result<String, String> {
         Ok(match l {
             Literal::Bool(b) => b.to_string(),
             Literal::Nil => "nil".to_string(),

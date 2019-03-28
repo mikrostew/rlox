@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 
 use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp, Visitor};
 use crate::environment::Environment;
@@ -50,21 +51,20 @@ impl fmt::Display for Object {
     }
 }
 
-pub struct Interpreter {
-    // the global environment of the interpreter
-    environment: Environment,
-}
+pub struct Interpreter;
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter {
-            environment: Environment::new(),
-        }
+        Interpreter {}
     }
 
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), String> {
+    pub fn interpret(
+        &mut self,
+        statements: Vec<Stmt>,
+        env: &Rc<Environment>,
+    ) -> Result<(), String> {
         for stmt in statements {
-            match self.execute(stmt) {
+            match self.execute(&stmt, env) {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("Runtime Error:");
@@ -75,12 +75,19 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expr: &Box<Expr>) -> Result<Object, String> {
-        expr.accept(self)
+    fn evaluate(&mut self, expr: &Box<Expr>, env: &Rc<Environment>) -> Result<Object, String> {
+        expr.accept(self, env)
     }
 
-    fn execute(&mut self, stmt: Stmt) -> Result<Object, String> {
-        stmt.accept(self)
+    fn execute(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<Object, String> {
+        stmt.accept(self, env)
+    }
+
+    fn exec_block(&mut self, stmts: &Vec<Stmt>, env: &Rc<Environment>) -> Result<(), String> {
+        for stmt in stmts {
+            self.execute(stmt, env)?;
+        }
+        Ok(())
     }
 }
 
@@ -99,37 +106,42 @@ fn add_or_concat(left: Object, right: Object, pos: &Position) -> Result<Object, 
 }
 
 impl Visitor<Object> for Interpreter {
-    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<Object, String> {
+    fn visit_stmt<'a>(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<Object, String> {
         match stmt {
+            Stmt::Block(statements) => {
+                // new environment for this block
+                let block_env = Environment::new(Some(env.clone()));
+                self.exec_block(statements, &block_env)?;
+            }
             Stmt::Expression(ref expr) => {
-                self.evaluate(expr)?;
+                self.evaluate(expr, env)?;
             }
             Stmt::Print(ref expr) => {
-                let value = self.evaluate(expr)?;
+                let value = self.evaluate(expr, env)?;
                 println!("{}", value);
             }
             Stmt::Var(name, ref expr) => {
                 // variable declaration
                 // evaluate the value and assign to the new variable
-                let value = self.evaluate(expr)?;
-                self.environment.define(name, value);
+                let value = self.evaluate(expr, env)?;
+                env.define(name, value);
             }
         }
         Ok(Object::Nil)
     }
 
-    fn visit_expr(&mut self, e: &Expr) -> Result<Object, String> {
+    fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<Object, String> {
         match e {
             Expr::Assign(var_name, ref expr) => {
                 // variable assignment
                 // evaluate the value and assign to the variable, returning the value
-                let value = self.evaluate(expr)?;
-                self.environment.assign(var_name, value.clone())?;
+                let value = self.evaluate(expr, env)?;
+                env.assign(var_name, value.clone())?;
                 Ok(value)
             }
             Expr::Binary(ref expr1, op, ref expr2) => {
-                let left = self.evaluate(expr1)?;
-                let right = self.evaluate(expr2)?;
+                let left = self.evaluate(expr1, env)?;
+                let right = self.evaluate(expr2, env)?;
 
                 Ok(match op {
                     // equality
@@ -163,21 +175,21 @@ impl Visitor<Object> for Interpreter {
                 })
             }
             // for a group, evaluate the inner expression
-            Expr::Grouping(ref expr) => self.evaluate(expr),
+            Expr::Grouping(ref expr) => self.evaluate(expr, env),
             // for a literal, visit the literal
-            Expr::Literal(lit) => lit.accept(self),
+            Expr::Literal(lit) => lit.accept(self, env),
             Expr::Unary(op, ref expr) => {
-                let right = self.evaluate(expr)?;
+                let right = self.evaluate(expr, env)?;
                 Ok(match op {
                     UnaryOp::Minus(pos) => Object::Number(-right.as_number(pos)?),
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
-            Expr::Variable(name) => self.environment.get(name),
+            Expr::Variable(name) => env.get(name),
         }
     }
 
-    fn visit_literal(&self, l: &Literal) -> Result<Object, String> {
+    fn visit_literal(&self, l: &Literal, _env: &Rc<Environment>) -> Result<Object, String> {
         Ok(match l {
             // just convert the literal to an object
             Literal::Bool(b) => Object::Bool(*b),

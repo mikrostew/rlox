@@ -1,45 +1,42 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::interpreter::Object;
 
 pub struct Environment {
     // any values defined locally in this environment
-    values: HashMap<String, Object>,
+    values: RefCell<HashMap<String, Object>>,
     // the Environment enclosing this one (for shadowed vars)
-    enclosing: Option<Box<Environment>>,
+    enclosing: Option<Rc<Environment>>,
 }
 
 impl Environment {
-    pub fn new() -> Self {
-        Environment {
-            values: HashMap::new(),
-            enclosing: None,
-        }
+    pub fn new(enclosing: Option<Rc<Environment>>) -> Rc<Self> {
+        Rc::new(Environment {
+            values: RefCell::new(HashMap::new()),
+            enclosing,
+        })
     }
 
-    pub fn enclosed_by(mut self, enclosing: Environment) -> Self {
-        self.enclosing = Some(Box::new(enclosing));
-        self
-    }
-
-    pub fn assign(&mut self, name: &String, value: Object) -> Result<(), String> {
-        if self.values.contains_key(name) {
-            self.values.insert(name.to_string(), value);
+    pub fn assign(&self, name: &String, value: Object) -> Result<(), String> {
+        if self.values.borrow().contains_key(name) {
+            self.values.borrow_mut().insert(name.to_string(), value);
             Ok(())
         } else {
             match self.enclosing {
-                Some(ref mut env) => env.assign(name, value),
+                Some(ref rc_env) => rc_env.assign(name, value),
                 None => Err(format!("Undefined variable `{}`", name)),
             }
         }
     }
 
-    pub fn define(&mut self, name: &String, value: Object) {
-        self.values.insert(name.to_string(), value);
+    pub fn define(&self, name: &String, value: Object) {
+        self.values.borrow_mut().insert(name.to_string(), value);
     }
 
     pub fn get(&self, name: &String) -> Result<Object, String> {
-        match self.values.get(&name.to_string()) {
+        match self.values.borrow().get(&name.to_string()) {
             // if it exists locally, return that
             Some(value) => Ok(value.clone()),
             None => {

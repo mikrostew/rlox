@@ -55,10 +55,11 @@ macro_rules! match_op {
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
-// statement      → expr_stmt | print_stmt ;
+// statement      → expr_stmt | print_stmt | block ;
 //
 // expr_stmt      → expression ";" ;
 // print_stmt     → "print" expression ";" ;
+// block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment | equality ;
@@ -173,6 +174,11 @@ impl Parser {
                     tokens.next();
                     Ok(Some(self.print_statement(tokens)?))
                 }
+                TokenKind::LeftBrace => {
+                    // consume the token and parse the print statement
+                    tokens.next();
+                    Ok(Some(self.block_statement(tokens)?))
+                }
                 // TODO: going to add the other ones
                 // once we hit EOF, that's the end of the statements
                 TokenKind::Eof => Ok(None),
@@ -201,6 +207,40 @@ impl Parser {
         Ok(Stmt::Print(Box::new(value)))
     }
 
+    // block → "{" declaration* "}" ;
+    fn block_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        let mut statements = Vec::new();
+
+        // loop through the block of statements until we hit the "}"
+        loop {
+            if let Some(token) = tokens.peek() {
+                match token.kind {
+                    // exit once we find the right brace
+                    TokenKind::RightBrace => break,
+                    // otherwise parse the statements
+                    _ => match self.declaration(tokens)? {
+                        Some(stmt) => statements.push(stmt),
+                        None => break,
+                    },
+                }
+            } else {
+                // ran out of tokens
+                break;
+            }
+        }
+
+        // TODO: this should be at the correct position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightBrace,
+            "expected `}` after block",
+            &todo_token,
+        )?;
+
+        Ok(Stmt::Block(statements))
+    }
+
     // expr_stmt → expression ";" ;
     fn expression_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
         let expr = self.expression(tokens)?;
@@ -217,10 +257,10 @@ impl Parser {
 
     // expression → assignment ;
     fn expression(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-        // TODO
         self.assignment(tokens)
     }
 
+    // assignment → IDENTIFIER "=" assignment | equality ;
     fn assignment(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         // parse the l-value (left hand side of assignment, or just an expression),
         // which at this point for assignment should just be an identifier
