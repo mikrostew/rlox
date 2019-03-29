@@ -55,6 +55,8 @@ impl Lox {
                 Ok(_n) => {
                     // println!("{} bytes read", _n);
                     let trimmed = input.trim();
+                    // TODO: it would be nice to support entering an expression and printing the resulting value, instead of requiring a statement
+                    // (see http://www.craftinginterpreters.com/statements-and-state.html#challenges)
                     match lox.run(trimmed, &mut interpreter) {
                         Ok(_) => (),
                         Err(e) => {

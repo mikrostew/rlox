@@ -1,20 +1,24 @@
 // print basic expressions
+
 print "one";
 print 2+17;
 print nil;
 print true == false;
 
 // global variable
+
 var not_initialized;
 print not_initialized;
 var beverage = "espresso";
 print beverage;
 
 // assignment
+
 not_initialized = "hot " + beverage;
 print not_initialized;
 
 // scope
+
 var a = "global a";
 var b = "global b";
 var c = "global c";
@@ -34,3 +38,9 @@ var c = "global c";
 print a;
 print b;
 print c;
+
+var a = 1;
+{
+  var a = a + 2;
+  print a;
+}
