@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal, LogicalOp, Stmt, UnaryOp};
 use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
@@ -14,14 +14,14 @@ pub struct Parser {
     tokens: Vec<Token>,
 }
 
-// $a → $b ( ( $match_ops ) $b )* ;
+// $fn_name → $next_fn ( ( $match_ops ) $next_fn )* ;
 macro_rules! binary_expr_parser {
-    ( $a:ident, $b:ident, $match_ops:ident ) => {
-        fn $a(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
-            let mut expr = self.$b(tokens)?;
+    ( $expr_kind:ident, $fn_name:ident, $next_fn:ident, $match_ops:ident ) => {
+        fn $fn_name(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+            let mut expr = self.$next_fn(tokens)?;
             while let Some(operator) = Parser::$match_ops(tokens) {
-                let right = self.$b(tokens)?;
-                expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+                let right = self.$next_fn(tokens)?;
+                expr = Expr::$expr_kind(Box::new(expr), operator, Box::new(right));
             }
             Ok(expr)
         }
@@ -63,7 +63,9 @@ macro_rules! match_op {
 // block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment | equality ;
+// assignment     → IDENTIFIER "=" assignment | logic_or ;
+// logic_or       → logic_and ( "or" logic_and )* ;
+// logic_and      → equality ( "and" equality )* ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -317,11 +319,11 @@ impl Parser {
         self.assignment(tokens)
     }
 
-    // assignment → IDENTIFIER "=" assignment | equality ;
+    // assignment → IDENTIFIER "=" assignment | logic_or ;
     fn assignment(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         // parse the l-value (left hand side of assignment, or just an expression),
-        // which at this point for assignment should just be an identifier
-        let l_value = self.equality(tokens)?;
+        // at this point for assignment this will just be an identifier
+        let l_value = self.logic_or(tokens)?;
 
         // TODO: there should be a match() function (like in the book) to do these 3 lines
         if let Some(token) = tokens.peek() {
@@ -354,17 +356,23 @@ impl Parser {
         Ok(l_value)
     }
 
+    // logic_or → logic_and ( "or" logic_and )* ;
+    binary_expr_parser!(Logical, logic_or, logic_and, match_or_op);
+
+    // logic_and → equality ( "and" equality )* ;
+    binary_expr_parser!(Logical, logic_and, equality, match_and_op);
+
     // equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    binary_expr_parser!(equality, comparison, match_equality_op);
+    binary_expr_parser!(Binary, equality, comparison, match_equality_op);
 
     // comparison → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-    binary_expr_parser!(comparison, addition, match_comparison_op);
+    binary_expr_parser!(Binary, comparison, addition, match_comparison_op);
 
     // addition → multiplication ( ( "-" | "+" ) multiplication )* ;
-    binary_expr_parser!(addition, multiplication, match_addition_op);
+    binary_expr_parser!(Binary, addition, multiplication, match_addition_op);
 
     // multiplication → unary ( ( "/" | "*" ) unary )* ;
-    binary_expr_parser!(multiplication, unary, match_multiplication_op);
+    binary_expr_parser!(Binary, multiplication, unary, match_multiplication_op);
 
     // unary → ( "!" | "-" ) unary | primary ;
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
@@ -417,6 +425,12 @@ impl Parser {
             return Err(report_string);
         }
     }
+
+    // if the next token is 'or', return the equivalent LogicalOp
+    match_op!(match_or_op, LogicalOp, Or);
+
+    // if the next token is 'and', return the equivalent LogicalOp
+    match_op!(match_and_op, LogicalOp, And);
 
     // if the next token is '!=' or '==', return the equivalent BinaryOp
     match_op!(match_equality_op, BinaryOp, BangEqual, EqualEqual);

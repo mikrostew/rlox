@@ -20,7 +20,9 @@ use crate::token::Position;
 // block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment | equality ;
+// assignment     → IDENTIFIER "=" assignment | logic_or ;
+// logic_or       → logic_and ( "or" logic_and )* ;
+// logic_and      → equality ( "and" equality )* ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -56,6 +58,7 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
     Literal(Literal),
+    Logical(Box<Expr>, LogicalOp, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
     Variable(String), // name
 }
@@ -114,6 +117,21 @@ impl fmt::Display for BinaryOp {
             BinaryOp::Minus(_) => "-",
             BinaryOp::Star(_) => "*",
             BinaryOp::Slash(_) => "/",
+        };
+        write!(f, "{}", op)
+    }
+}
+
+pub enum LogicalOp {
+    And(Position),
+    Or(Position),
+}
+
+impl fmt::Display for LogicalOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let op = match self {
+            LogicalOp::And(_) => "&&",
+            LogicalOp::Or(_) => "||",
         };
         write!(f, "{}", op)
     }
@@ -203,6 +221,12 @@ impl Visitor<String> for AstPrinter {
             ),
             Expr::Grouping(ref expr) => format!("({})", expr.accept(self, env)?),
             Expr::Literal(lit) => lit.accept(self, env)?,
+            Expr::Logical(ref expr1, op, ref expr2) => format!(
+                "({} {} {})",
+                expr1.accept(self, env)?,
+                op,
+                expr2.accept(self, env)?
+            ),
             Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self, env)?),
             Expr::Variable(name) => format!("{}", name),
         })

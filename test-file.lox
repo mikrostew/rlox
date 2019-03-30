@@ -52,4 +52,7 @@ if (4 > 3)
 else
   print "that's not right";
 
+// logical operators
 
+print "hi" or 2; // "hi"
+print nil or "yes"; // "yes"

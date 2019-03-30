@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-use crate::ast::{BinaryOp, Expr, Literal, Stmt, UnaryOp, Visitor};
+use crate::ast::{BinaryOp, Expr, Literal, LogicalOp, Stmt, UnaryOp, Visitor};
 use crate::environment::Environment;
 use crate::token::Position;
 
@@ -15,10 +15,10 @@ pub enum Object {
 }
 
 impl Object {
-    pub fn is_truthy(self) -> bool {
+    pub fn is_truthy(&self) -> bool {
         match self {
             // like Ruby, only nil and false are falsey
-            Object::Bool(b) => b,
+            Object::Bool(b) => *b,
             Object::Nil => false,
             // anything else is truthy
             _ => true,
@@ -189,6 +189,25 @@ impl Visitor<Object> for Interpreter {
             Expr::Grouping(ref expr) => self.evaluate(expr, env),
             // for a literal, visit the literal
             Expr::Literal(lit) => lit.accept(self, env),
+            Expr::Logical(ref expr1, op, ref expr2) => {
+                // see if we can short-circuit
+                let left = self.evaluate(expr1, env)?;
+                match op {
+                    LogicalOp::Or(_) => {
+                        if left.is_truthy() {
+                            return Ok(left);
+                        }
+                    }
+                    LogicalOp::And(_) => {
+                        if !left.is_truthy() {
+                            return Ok(left);
+                        }
+                    }
+                }
+
+                // if we can't short-circuit, return result of right
+                self.evaluate(expr2, env)
+            }
             Expr::Unary(op, ref expr) => {
                 let right = self.evaluate(expr, env)?;
                 Ok(match op {
