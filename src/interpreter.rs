@@ -116,6 +116,17 @@ impl Visitor<Object> for Interpreter {
             Stmt::Expression(ref expr) => {
                 self.evaluate(expr, env)?;
             }
+            Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
+                let condition = self.evaluate(if_expr, env)?;
+                if condition.is_truthy() {
+                    self.execute(then_stmt, env)?;
+                } else {
+                    // only execute the else_stmt if there is one
+                    if let Some(else_stmt) = opt_else_stmt {
+                        self.execute(else_stmt, env)?;
+                    }
+                }
+            }
             Stmt::Print(ref expr) => {
                 let value = self.evaluate(expr, env)?;
                 println!("{}", value);

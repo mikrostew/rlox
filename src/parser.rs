@@ -55,9 +55,10 @@ macro_rules! match_op {
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
-// statement      → expr_stmt | print_stmt | block ;
+// statement      → expr_stmt | if_stmt | print_stmt | block ;
 //
 // expr_stmt      → expression ";" ;
+// if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
 // print_stmt     → "print" expression ";" ;
 // block          → "{" declaration* "}" ;
 //
@@ -165,10 +166,15 @@ impl Parser {
         Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
     }
 
-    // statement → expr_stmt | print_stmt ;
+    // statement → expr_stmt | if_stmt | print_stmt | block ;
     fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
             match token.kind {
+                TokenKind::If => {
+                    // consume the token and parse the print statement
+                    tokens.next();
+                    Ok(Some(self.if_statement(tokens)?))
+                }
                 TokenKind::Print => {
                     // consume the token and parse the print statement
                     tokens.next();
@@ -191,6 +197,57 @@ impl Parser {
             // no more tokens, no more statements
             Ok(None)
         }
+    }
+
+    // if_stmt → "if" "(" expression ")" statement ( "else" statement )? ;
+    fn if_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        // TODO: this should be the actual position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::LeftParen,
+            "expected `(` after `if`",
+            &todo_token,
+        )?;
+
+        let condition = self.expression(tokens)?;
+
+        // TODO: this should be the actual position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightParen,
+            "expected `)` after if condition",
+            &todo_token,
+        )?;
+
+        let then_branch = self
+            .statement(tokens)?
+            .ok_or("TODO: expected statement after `if ( )`")?;
+
+        // this will attach a dangling `else` to the closest `if`
+        let else_branch = if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::Else => {
+                    // consume the else and parse the statement
+                    tokens.next();
+                    Some(
+                        self.statement(tokens)?
+                            .ok_or("TODO: expected statement after `else`")?,
+                    )
+                }
+                _ => None,
+            }
+        } else {
+            // no more tokens
+            None
+        };
+
+        Ok(Stmt::If(
+            Box::new(condition),
+            Box::new(then_branch),
+            else_branch.map(|eb| Box::new(eb)),
+        ))
     }
 
     // print_stmt → "print" expression ";" ;

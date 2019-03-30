@@ -12,9 +12,10 @@ use crate::token::Position;
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
-// statement      → expr_stmt | print_stmt | block ;
+// statement      → expr_stmt | if_stmt | print_stmt | block ;
 //
 // expr_stmt      → expression ";" ;
+// if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
 // print_stmt     → "print" expression ";" ;
 // block          → "{" declaration* "}" ;
 //
@@ -33,6 +34,7 @@ use crate::token::Position;
 pub enum Stmt {
     Block(Vec<Stmt>),
     Expression(Box<Expr>),
+    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>), // if expr then stmt (else stmt)?
     Print(Box<Expr>),
     Var(String, Box<Expr>), // name, initializer
 }
@@ -168,8 +170,22 @@ impl Visitor<String> for AstPrinter {
                     format!("{{\n{}}}\n", formatted_stmts)
                 }
             }
-            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self, env)?),
             Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self, env)?),
+            Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
+                let mut if_stmt = String::new();
+                if_stmt.push_str("if ");
+                if_stmt.push_str(&if_expr.accept(self, env)?);
+                if_stmt.push_str("\nthen:\n");
+                if_stmt.push_str(&then_stmt.accept(self, env)?);
+                if let Some(ref else_stmt) = opt_else_stmt {
+                    if_stmt.push_str("else:\n");
+                    if_stmt.push_str(&else_stmt.accept(self, env)?);
+                } else {
+                    if_stmt.push_str("(no else)\n");
+                }
+                if_stmt
+            }
+            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self, env)?),
             Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self, env)?),
         })
     }
