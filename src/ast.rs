@@ -4,31 +4,7 @@ use std::rc::Rc;
 use crate::environment::Environment;
 use crate::token::Position;
 
-// AST for this grammar:
-//
-// program        → declaration* EOF ;
-//
-// declaration    → var_decl | statement ;
-//
-// var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
-//
-// statement      → expr_stmt | if_stmt | print_stmt | block ;
-//
-// expr_stmt      → expression ";" ;
-// if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
-// print_stmt     → "print" expression ";" ;
-// block          → "{" declaration* "}" ;
-//
-// expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment | logic_or ;
-// logic_or       → logic_and ( "or" logic_and )* ;
-// logic_and      → equality ( "and" equality )* ;
-// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-// comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-// addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
-// multiplication → unary ( ( "/" | "*" ) unary )* ;
-// unary          → ( "!" | "-" ) unary | primary ;
-// primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
+// AST for the lox language
 
 // for some ideas on visitor pattern in Rust, see:
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
@@ -38,7 +14,8 @@ pub enum Stmt {
     Expression(Box<Expr>),
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>), // if expr then stmt (else stmt)?
     Print(Box<Expr>),
-    Var(String, Box<Expr>), // name, initializer
+    Var(String, Box<Expr>),      // name, initializer
+    While(Box<Expr>, Box<Stmt>), // condition, body
 }
 
 impl Stmt {
@@ -53,6 +30,7 @@ impl Stmt {
 
 // TODO: all of these should implement some kind of "Position" trait, so that they have a
 // .position() method which gives the line, col, and length (for error reporting niceness)
+// (so, possibly these should be classes...)
 pub enum Expr {
     Assign(String, Box<Expr>), // name, value
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
@@ -205,6 +183,11 @@ impl Visitor<String> for AstPrinter {
             }
             Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self, env)?),
             Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self, env)?),
+            Stmt::While(ref condition, ref body) => format!(
+                "while ( {} ) {}",
+                condition.accept(self, env)?,
+                body.accept(self, env)?
+            ),
         })
     }
 

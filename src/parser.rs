@@ -55,22 +55,40 @@ macro_rules! match_op {
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
-// statement      → expr_stmt | if_stmt | print_stmt | block ;
+// statement      → expr_stmt
+//                | if_stmt
+//                | print_stmt
+//                | while_stmt
+//                | block ;
 //
 // expr_stmt      → expression ";" ;
+//
 // if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
+//
 // print_stmt     → "print" expression ";" ;
+//
+// while_stmt     → "while" "(" expression ")" statement ;
+//
 // block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
+//
 // assignment     → IDENTIFIER "=" assignment | logic_or ;
+//
 // logic_or       → logic_and ( "or" logic_and )* ;
+//
 // logic_and      → equality ( "and" equality )* ;
+//
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+//
 // comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+//
 // addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
+//
 // multiplication → unary ( ( "/" | "*" ) unary )* ;
+//
 // unary          → ( "!" | "-" ) unary | primary ;
+//
 // primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
 impl Parser {
     pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
@@ -168,10 +186,11 @@ impl Parser {
         Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
     }
 
-    // statement → expr_stmt | if_stmt | print_stmt | block ;
+    // statement → expr_stmt | if_stmt | print_stmt | while_stmt | block ;
     fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
             match token.kind {
+                // TODO: use a macro or something here, these are so similar
                 TokenKind::If => {
                     // consume the token and parse the print statement
                     tokens.next();
@@ -181,6 +200,11 @@ impl Parser {
                     // consume the token and parse the print statement
                     tokens.next();
                     Ok(Some(self.print_statement(tokens)?))
+                }
+                TokenKind::While => {
+                    // consume the token and parse the while statement
+                    tokens.next();
+                    Ok(Some(self.while_statement(tokens)?))
                 }
                 TokenKind::LeftBrace => {
                     // consume the token and parse the print statement
@@ -264,6 +288,39 @@ impl Parser {
             &todo_token,
         )?;
         Ok(Stmt::Print(Box::new(value)))
+    }
+
+    // while_stmt → "while" "(" expression ")" statement ;
+    fn while_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        // TODO: this should be at the correct position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::LeftParen,
+            "expected `(` after while",
+            &todo_token,
+        )?;
+
+        let condition = self.expression(tokens)?;
+
+        // TODO: this should be at the correct position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightParen,
+            "expected `)` after condition",
+            &todo_token,
+        )?;
+
+        let body = match self.statement(tokens)? {
+            Some(stmt) => stmt,
+            None => {
+                // TODO: report error instead of just returning it
+                return Err("no body for `while` loop".to_string());
+            }
+        };
+
+        Ok(Stmt::While(Box::new(condition), Box::new(body)))
     }
 
     // block → "{" declaration* "}" ;

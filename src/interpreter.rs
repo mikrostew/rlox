@@ -137,6 +137,11 @@ impl Visitor<Object> for Interpreter {
                 let value = self.evaluate(expr, env)?;
                 env.define(name, value);
             }
+            Stmt::While(ref condition, ref body) => {
+                while self.evaluate(condition, env)?.is_truthy() {
+                    self.execute(body, env)?;
+                }
+            }
         }
         Ok(Object::Nil)
     }

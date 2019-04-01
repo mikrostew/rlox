@@ -47,9 +47,9 @@ impl fmt::Display for Position {
 #[derive(PartialEq, Clone)]
 pub enum TokenKind {
     // Single-character tokens
-    LeftParen,
+    LeftParen, // TODO: I like open & close paren better here
     RightParen,
-    LeftBrace,
+    LeftBrace, // TODO: I like open & close brace better here
     RightBrace,
     Comma,
     Dot,
