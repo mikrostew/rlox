@@ -254,8 +254,12 @@ impl Parser {
 
         let initializer = if let Some(token) = tokens.peek() {
             match token.kind {
-                TokenKind::Semicolon => None,
-                TokenKind::Var => Some(self.var_declaration(tokens)?),
+                TokenKind::Semicolon => {
+                    // consume the token, and don't create an initializer
+                    tokens.next();
+                    None
+                }
+                TokenKind::Var => self.declaration(tokens)?,
                 _ => Some(self.expression_statement(tokens)?),
             }
         } else {
