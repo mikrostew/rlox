@@ -56,12 +56,19 @@ macro_rules! match_op {
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
 // statement      → expr_stmt
+//                | for_stmt
 //                | if_stmt
 //                | print_stmt
 //                | while_stmt
 //                | block ;
 //
 // expr_stmt      → expression ";" ;
+//
+// for_stmt        → "for" "("
+//                      ( var_decl | expr_stmt | ";" )
+//                      expression? ";"
+//                      expression?
+//                  ")" statement ;
 //
 // if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
 //
@@ -186,11 +193,16 @@ impl Parser {
         Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
     }
 
-    // statement → expr_stmt | if_stmt | print_stmt | while_stmt | block ;
+    // statement → expr_stmt | for_stmt | if_stmt | print_stmt | while_stmt | block ;
     fn statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
             match token.kind {
                 // TODO: use a macro or something here, these are so similar
+                TokenKind::For => {
+                    // consume the token and parse the print statement
+                    tokens.next();
+                    Ok(Some(self.for_statement(tokens)?))
+                }
                 TokenKind::If => {
                     // consume the token and parse the print statement
                     tokens.next();
@@ -223,6 +235,100 @@ impl Parser {
             // no more tokens, no more statements
             Ok(None)
         }
+    }
+
+    // for_stmt → "for" "("
+    //               ( var_decl | expr_stmt | ";" )
+    //               expression? ";"
+    //               expression?
+    //            ")" statement ;
+    fn for_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        // TODO: this should be the actual position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::LeftParen,
+            "expected `(` after `for`",
+            &todo_token,
+        )?;
+
+        let initializer = if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::Semicolon => None,
+                TokenKind::Var => Some(self.var_declaration(tokens)?),
+                _ => Some(self.expression_statement(tokens)?),
+            }
+        } else {
+            // no more tokens, so no initializer
+            None
+        };
+
+        let condition = if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::Semicolon => None,
+                _ => Some(self.expression(tokens)?),
+            }
+        } else {
+            // no more tokens, no condition
+            None
+        };
+        // TODO: this should be the actual position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::Semicolon,
+            "expected `;` after loop condition",
+            &todo_token,
+        )?;
+
+        let increment = if let Some(token) = tokens.peek() {
+            match token.kind {
+                TokenKind::RightParen => None,
+                _ => Some(self.expression(tokens)?),
+            }
+        } else {
+            // no more tokens, no increment
+            None
+        };
+        // TODO: this should be the actual position
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightParen,
+            "expected `)` after `for` clauses",
+            &todo_token,
+        )?;
+
+        // optional loop body (if nothing, default to an empty block)
+        let body = self.statement(tokens)?.unwrap_or(Stmt::Block(Vec::new()));
+
+        // now build the for loop using a while loop
+
+        let loop_body = match increment {
+            // if there is an increment, it executes after the body in each loop iteration
+            Some(inc) => Stmt::Block(vec![body, Stmt::Expression(Box::new(inc))]),
+            None => body,
+        };
+
+        let while_body = match condition {
+            // build the loop using a primitive while loop
+            // if there is a condition, use it, otherwise no condition == true
+            Some(cond) => Stmt::While(Box::new(cond), Box::new(loop_body)),
+            None => Stmt::While(
+                Box::new(Expr::Literal(Literal::Bool(true))),
+                Box::new(loop_body),
+            ),
+        };
+
+        // if there is an initializer, run that before the whole loop
+        let full_loop = if let Some(init) = initializer {
+            Stmt::Block(vec![init, while_body])
+        } else {
+            // no initializer
+            while_body
+        };
+
+        Ok(full_loop)
     }
 
     // if_stmt → "if" "(" expression ")" statement ( "else" statement )? ;
