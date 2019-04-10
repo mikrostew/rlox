@@ -138,6 +138,13 @@ impl Parser {
     //    (e.g. `<= 7`, or `== 4`)
     // see http://www.craftinginterpreters.com/parsing-expressions.html#challenges
 
+    // TODO: Add support for break statements
+    // (http://www.craftinginterpreters.com/control-flow.html#challenges)
+    // The syntax is a `break` keyword followed by a semicolon.
+    // It should be a syntax error to have a break statement appear outside of any enclosing loop.
+    // At runtime, a break statement causes execution to jump to the end of the nearest enclosing loop and proceeds from there.
+    // Note that the break may be nested inside other blocks and if statements that also need to be exited.
+
     // declaration → var_decl | statement ;
     fn declaration(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
