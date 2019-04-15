@@ -1,13 +1,14 @@
 use std::fmt;
 
 // keep track of current location
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Position {
     // TODO: will need file path?
     // current line number
     pub line: u64,
     // current column
     pub column: u64,
+    // TODO: this should include length (instead of it being separate, like it is now)
 }
 
 impl Position {

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::iter::Peekable;
 use std::slice::Iter;
 
@@ -47,11 +48,31 @@ macro_rules! match_op {
     };
 }
 
+enum FunKind {
+    Function,
+}
+
+impl fmt::Display for FunKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FunKind::Function => write!(f, "function"),
+        }
+    }
+}
+
 // Parser for this grammar:
 //
 // program        → declaration* EOF ;
 //
-// declaration    → var_decl | statement ;
+// declaration    → fun_decl
+//                | var_decl
+//                | statement ;
+//
+// fun_decl       → "fun" function ;
+//
+// function       → IDENTIFIER "(" parameters? ")" block ;
+//
+// parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 //
 // var_decl       → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
@@ -94,9 +115,13 @@ macro_rules! match_op {
 //
 // multiplication → unary ( ( "/" | "*" ) unary )* ;
 //
-// unary          → ( "!" | "-" ) unary | primary ;
+// unary          → ( "!" | "-" ) unary | call ;
+//
+// call           → primary ( "(" arguments? ")" )* ;
 //
 // primary        → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
+//
+// arguments      → expression ( "," expression )* ;
 impl Parser {
     pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
         Parser {
@@ -145,10 +170,16 @@ impl Parser {
     // At runtime, a break statement causes execution to jump to the end of the nearest enclosing loop and proceeds from there.
     // Note that the break may be nested inside other blocks and if statements that also need to be exited.
 
-    // declaration → var_decl | statement ;
+    // declaration → fun_decl | var_decl | statement ;
     fn declaration(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Option<Stmt>, String> {
         if let Some(token) = tokens.peek() {
             match token.kind {
+                TokenKind::Fun => {
+                    // consume the token and parse the function declaration
+                    tokens.next();
+                    // TODO: "function" should be an enum
+                    Ok(Some(self.function(FunKind::Function, tokens)?))
+                }
                 TokenKind::Var => {
                     // consume the token and parse the var declaration
                     tokens.next();
@@ -164,6 +195,101 @@ impl Parser {
             // no more tokens, no more statements
             Ok(None)
         }
+    }
+
+    // function → IDENTIFIER "(" parameters? ")" block ;
+    fn function(&self, kind: FunKind, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
+        // TODO: this should be the position of the function name
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        let name = self.consume_or_err(
+            tokens,
+            TokenKind::Identifier("".to_string()),
+            &format!("expected {} name", kind),
+            &todo_token,
+        )?;
+
+        // TODO: this should be the position of the paren
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::LeftParen,
+            &format!("expected `(` after {} name", kind),
+            &todo_token,
+        )?;
+
+        let mut parameters = Vec::new();
+
+        // parse the parameters
+        if let Some(token) = tokens.peek() {
+            match token.kind {
+                // if there are no params, skip parsing them
+                TokenKind::RightParen => (),
+                // otherwise keep parsing the comma-separated params
+                _ => {
+                    loop {
+                        // TODO: this should be the position of the param
+                        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+                        let param = self.consume_or_err(
+                            tokens,
+                            TokenKind::Identifier("".to_string()),
+                            &format!("expected parameter name"),
+                            &todo_token,
+                        )?;
+
+                        // only supports 8 arguments max
+                        if parameters.len() >= 8 {
+                            // just report the error - don't need to stop parsing & synchronize
+                            // TODO: this should really be the position of the argument
+                            let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+                            // TODO: and, this should call some kind of self.error() function,
+                            // which can set an error flag (this will not actually stop the parser, oops)
+                            self.err_reporter.report(
+                                "cannot have more than 8 parameters",
+                                "this param",
+                                &todo_token.position,
+                                todo_token.length,
+                            );
+                        }
+
+                        parameters.push(param.to_string());
+                        if let Some(token) = tokens.peek() {
+                            match token.kind {
+                                TokenKind::Comma => {
+                                    // consume the comma token and continue parsing params
+                                    tokens.next();
+                                }
+                                // otherwise break out of the loop
+                                _ => break,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // TODO: this should be the position of the closing paren
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightParen,
+            &format!("expected `)` after {} parameters", kind),
+            &todo_token,
+        )?;
+
+        // parse the function body
+
+        // TODO: this should be the position of the opening brace
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::LeftBrace,
+            &format!("expected `{{` before {} body", kind),
+            &todo_token,
+        )?;
+
+        let body = self.block_statement(tokens)?;
+
+        Ok(Stmt::Function(name.to_string(), parameters, Box::new(body)))
     }
 
     // var_decl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -548,14 +674,98 @@ impl Parser {
     // multiplication → unary ( ( "/" | "*" ) unary )* ;
     binary_expr_parser!(Binary, multiplication, unary, match_multiplication_op);
 
-    // unary → ( "!" | "-" ) unary | primary ;
+    // unary → ( "!" | "-" ) unary | call ;
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(operator) = Parser::match_unary_op(tokens) {
             let right = self.unary(tokens)?;
             return Ok(Expr::Unary(operator, Box::new(right)));
         }
 
-        self.primary(tokens)
+        // if it's not a unary, bubble up to the call syntax
+        self.call(tokens)
+    }
+
+    // call → primary ( "(" arguments? ")" )* ;
+    fn call(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+        // call starts with a primary expression (left operand)
+        let mut expr = self.primary(tokens)?;
+
+        // handle any function calls
+        loop {
+            if let Some(token) = tokens.peek() {
+                match token.kind {
+                    TokenKind::LeftParen => {
+                        // consume the left paren and finish the call
+                        tokens.next();
+                        expr = self.finish_call(expr, tokens)?;
+                    }
+                    // TODO: going to handle properties on objects
+                    _ => break,
+                }
+            } else {
+                break;
+            }
+        }
+
+        // return the function calls, or just the primary expr if no function calls
+        Ok(expr)
+    }
+
+    fn finish_call(
+        &self,
+        callee: Expr,
+        tokens: &mut Peekable<Iter<Token>>,
+    ) -> Result<Expr, String> {
+        let mut args = Vec::new();
+
+        if let Some(token) = tokens.peek() {
+            match token.kind {
+                // if there are no args, skip parsing them
+                TokenKind::RightParen => (),
+                // otherwise keep parsing the comma-separated args
+                _ => {
+                    loop {
+                        let arg = self.expression(tokens)?;
+                        // only supports 8 arguments max
+                        if args.len() >= 8 {
+                            // just report the error - don't need to stop parsing & synchronize
+                            // TODO: this should really be the position of the argument
+                            let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+                            // TODO: and, this should call some kind of self.error() function,
+                            // which can set an error flag (this will not actually stop the parser, oops)
+                            self.err_reporter.report(
+                                "cannot have more than 8 arguments",
+                                "this argument",
+                                &todo_token.position,
+                                todo_token.length,
+                            );
+                        }
+                        args.push(Box::new(arg));
+                        if let Some(token) = tokens.peek() {
+                            match token.kind {
+                                TokenKind::Comma => {
+                                    // consume the comma token and continue parsing args
+                                    tokens.next();
+                                }
+                                // otherwise break out of the loop
+                                _ => break,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // TODO: this should really be the position of where the closing paren should be
+        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+        self.consume_or_err(
+            tokens,
+            TokenKind::RightParen,
+            "expected `)` after arguments",
+            &todo_token,
+        )?;
+
+        Ok(Expr::Call(Box::new(callee), args))
     }
 
     // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;

@@ -4,7 +4,6 @@ use std::io::Write;
 use std::process::exit;
 
 use crate::ast::AstPrinter;
-use crate::environment::Environment;
 use crate::error;
 use crate::interpreter::Interpreter;
 use crate::parser::Parser;
@@ -106,9 +105,8 @@ impl Lox {
         println!("{}", ast_printer.print(&statements)?);
         println!("");
 
-        let environment = Environment::new(None);
         println!("result:");
-        interpreter.interpret(statements, &environment)?;
+        interpreter.interpret(statements)?;
         println!("");
 
         Ok(())

@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::interpreter::Object;
 
+#[derive(PartialEq)]
 pub struct Environment {
     // any values defined locally in this environment
     values: RefCell<HashMap<String, Object>>,

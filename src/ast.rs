@@ -9,9 +9,11 @@ use crate::token::Position;
 // for some ideas on visitor pattern in Rust, see:
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Block(Vec<Stmt>),
     Expression(Box<Expr>),
+    Function(String, Vec<String>, Box<Stmt>), // name, params, body
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>), // if expr then stmt (else stmt)?
     Print(Box<Expr>),
     Var(String, Box<Expr>),      // name, initializer
@@ -30,10 +32,12 @@ impl Stmt {
 
 // TODO: all of these should implement some kind of "Position" trait, so that they have a
 // .position() method which gives the line, col, and length (for error reporting niceness)
-// (so, possibly these should be classes...)
+// (so, maybe these should be structs...)
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Assign(String, Box<Expr>), // name, value
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
+    Call(Box<Expr>, Vec<Box<Expr>>), // callee (thing being called), arguments
     Grouping(Box<Expr>),
     Literal(Literal),
     Logical(Box<Expr>, LogicalOp, Box<Expr>),
@@ -52,7 +56,7 @@ impl Expr {
 }
 
 // so that the matching for this can be restricted
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOp {
     Minus(Position),
     Bang(Position),
@@ -69,6 +73,7 @@ impl fmt::Display for UnaryOp {
 }
 
 // so that the matching for this can be restricted
+#[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
     BangEqual(Position),
     EqualEqual(Position),
@@ -100,6 +105,7 @@ impl fmt::Display for BinaryOp {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogicalOp {
     And(Position),
     Or(Position),
@@ -115,6 +121,7 @@ impl fmt::Display for LogicalOp {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Bool(bool),
     Nil,
@@ -167,6 +174,10 @@ impl Visitor<String> for AstPrinter {
                 }
             }
             Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self, env)?),
+            Stmt::Function(_name, _params, _body) => {
+                // TODO
+                format!("function")
+            }
             Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
                 let mut if_stmt = String::new();
                 if_stmt.push_str("if ");
@@ -202,6 +213,18 @@ impl Visitor<String> for AstPrinter {
                 token,
                 expr2.accept(self, env)?
             ),
+            Expr::Call(ref callee_expr, args) => {
+                // TODO: join a vec of strings with commas
+                let arg_string = args
+                    .into_iter()
+                    .map(|a| match a.accept(self, env) {
+                        Ok(s) => s,
+                        Err(e) => format!("Error: {}", e),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                format!("{}({})", callee_expr.accept(self, env)?, arg_string)
+            }
             Expr::Grouping(ref expr) => format!("({})", expr.accept(self, env)?),
             Expr::Literal(lit) => lit.accept(self, env)?,
             Expr::Logical(ref expr1, op, ref expr2) => format!(

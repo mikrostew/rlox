@@ -9,7 +9,10 @@ use crate::token::Position;
 #[derive(PartialEq, Clone)]
 pub enum Object {
     Bool(bool),
+    Function(LoxFunction),
     Nil,
+    // this doesn't really work - need to contain some kind of struct
+    NativeFunction(String, u32, Box<fn() -> Object>), // name, arity, function
     Number(f64),
     String(String),
 }
@@ -38,33 +41,107 @@ impl Object {
             _ => Err(format!("[{}] operand must be a string, got {}", pos, self)),
         }
     }
+
+    // TODO: input the position to this mess
+    pub fn to_callable(self) -> Result<impl Callable, String> {
+        match self {
+            Object::Function(f) => Ok(f),
+            // TODO: native functions as well
+            _ => Err(format!(
+                "[positionTBD] can only call functions and methods, {} is neither",
+                self
+            )),
+        }
+    }
 }
 
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Object::Bool(b) => write!(f, "{}", b),
+            Object::Function(fun) => write!(f, "<fn {}>", fun.name),
             Object::Nil => write!(f, "nil"),
+            // TODO:
+            Object::NativeFunction(name, _, _) => write!(f, "<nativefn {}>", name),
             Object::Number(n) => write!(f, "{}", n),
             Object::String(s) => write!(f, "{}", s),
         }
     }
 }
 
-pub struct Interpreter;
+// TODO: not sure how I want to handle these exactly...
+pub trait Callable {
+    fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String>;
+    fn arity(self) -> usize;
+}
+
+#[derive(PartialEq, Clone)]
+pub struct LoxFunction {
+    name: String,
+    params: Vec<String>,
+    body: Box<Stmt>,
+    closure: Rc<Environment>,
+}
+
+impl LoxFunction {
+    pub fn new(
+        name: String,
+        params: Vec<String>,
+        body: Box<Stmt>,
+        closure: &Rc<Environment>,
+    ) -> Self {
+        LoxFunction {
+            name,
+            params,
+            body,
+            closure: Rc::clone(closure),
+        }
+    }
+}
+
+impl Callable for LoxFunction {
+    fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String> {
+        let env = Environment::new(Some(self.closure));
+
+        for (i, param) in self.params.iter().enumerate() {
+            env.define(param, args[i].to_owned());
+        }
+
+        interpreter.execute(&self.body, &env)?;
+
+        Ok(Object::Nil)
+    }
+    fn arity(self) -> usize {
+        self.params.len()
+    }
+}
+
+pub struct Interpreter {
+    // top-level environment
+    environment: Rc<Environment>,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter {}
+        let globals = Environment::new(None);
+
+        // define global functions
+
+        fn clock_fn() -> Object {
+            Object::Number(12.2)
+        }
+        let clock_obj = Object::NativeFunction("clock".to_string(), 0, Box::new(clock_fn));
+
+        globals.define(&"clock".to_string(), clock_obj);
+
+        Interpreter {
+            environment: globals,
+        }
     }
 
-    pub fn interpret(
-        &mut self,
-        statements: Vec<Stmt>,
-        env: &Rc<Environment>,
-    ) -> Result<(), String> {
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), String> {
         for stmt in statements {
-            match self.execute(&stmt, env) {
+            match self.execute(&stmt, &self.environment.clone()) {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("Runtime Error:");
@@ -115,6 +192,11 @@ impl Visitor<Object> for Interpreter {
             }
             Stmt::Expression(ref expr) => {
                 self.evaluate(expr, env)?;
+            }
+            Stmt::Function(name, params, ref body) => {
+                let lox_function =
+                    LoxFunction::new(name.clone(), params.to_owned(), body.to_owned(), env);
+                env.define(name, Object::Function(lox_function));
             }
             Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
                 let condition = self.evaluate(if_expr, env)?;
@@ -189,6 +271,24 @@ impl Visitor<Object> for Interpreter {
                         Object::Number(left.as_number(pos)? / right.as_number(pos)?)
                     }
                 })
+            }
+            // function/method call
+            Expr::Call(ref callee_expr, args) => {
+                // first evaluate the expression for the callee
+                // (usually just an identifier, but could be anything)
+                let callee = self.evaluate(callee_expr, env)?;
+                let callable = callee.to_callable()?;
+
+                // then evaluate each of the argument expressions in order,
+                // storing the resulting values
+                let mut arguments = Vec::new();
+                for arg in args {
+                    arguments.push(self.evaluate(arg, env)?);
+                }
+
+                // call the function
+                // TODO: check arity here? (http://www.craftinginterpreters.com/functions.html#checking-arity)
+                callable.call(self, arguments)
             }
             // for a group, evaluate the inner expression
             Expr::Grouping(ref expr) => self.evaluate(expr, env),
