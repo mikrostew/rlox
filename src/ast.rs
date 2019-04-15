@@ -174,9 +174,11 @@ impl Visitor<String> for AstPrinter {
                 }
             }
             Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self, env)?),
-            Stmt::Function(_name, _params, _body) => {
-                // TODO
-                format!("function")
+            Stmt::Function(name, params, body) => {
+                let formatted_params = params.join(", ");
+                let formatted_body = body.accept(self, env)?;
+
+                format!("<fn {}>({}) {}", name, formatted_params, formatted_body)
             }
             Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
                 let mut if_stmt = String::new();
