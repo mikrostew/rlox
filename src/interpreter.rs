@@ -102,7 +102,11 @@ impl LoxFunction {
 
         // check number of args
         if self.params.len() != args.len() {
-            return Err(format!("Expected {} arguments, got {}", self.params.len(), args.len()));
+            return Err(format!(
+                "Expected {} arguments, got {}",
+                self.params.len(),
+                args.len()
+            ));
         }
 
         for (i, param) in self.params.iter().enumerate() {
@@ -138,7 +142,11 @@ impl LoxNativeFunction {
     fn call(self, _interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String> {
         // check number of args
         if self.params.len() != args.len() {
-            return Err(format!("Expected {} arguments, got {}", self.params.len(), args.len()));
+            return Err(format!(
+                "Expected {} arguments, got {}",
+                self.params.len(),
+                args.len()
+            ));
         }
 
         // call the function
@@ -157,12 +165,12 @@ impl Interpreter {
 
         // global functions
 
-
-
         // clock() - get time since epoch in seconds (with ms after the decimal)
         fn clock_fn(_args: Vec<Object>) -> Result<Object, String> {
             let now = SystemTime::now();
-            let time_since_epoch = now.duration_since(UNIX_EPOCH).expect("failed to get clock time");
+            let time_since_epoch = now
+                .duration_since(UNIX_EPOCH)
+                .expect("failed to get clock time");
             let time_in_seconds = time_since_epoch.as_millis() as f64 / 1000.0;
 
             Ok(Object::Number(time_in_seconds))

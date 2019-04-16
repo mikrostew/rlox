@@ -37,7 +37,6 @@ impl Position {
     }
 }
 
-// TODO: also Debug?
 impl fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
@@ -48,10 +47,10 @@ impl fmt::Display for Position {
 #[derive(PartialEq, Clone)]
 pub enum TokenKind {
     // Single-character tokens
-    LeftParen, // TODO: I like open & close paren better here
-    RightParen,
-    LeftBrace, // TODO: I like open & close brace better here
-    RightBrace,
+    OpenParen,  // '('
+    CloseParen, // ')'
+    OpenBrace,  // '{'
+    CloseBrace, // '}'
     Comma,
     Dot,
     Minus,
@@ -59,6 +58,7 @@ pub enum TokenKind {
     Semicolon,
     Slash,
     Star,
+
     // One or two character tokens
     Bang,
     BangEqual,
@@ -68,10 +68,12 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
+
     // Literals
     Identifier(String),
     String(String),
     Number(f64),
+
     // Keywords
     And,
     Class,
@@ -89,8 +91,10 @@ pub enum TokenKind {
     True,
     Var,
     While,
+
     // Other
     Eof,
+
     // Tokens that will be ignored (comments, unknown chars)
     Ignore,
 }
@@ -102,10 +106,10 @@ impl fmt::Display for TokenKind {
 
         let to_write = match self {
             // Single-character tokens
-            TokenKind::LeftParen => "LeftParen",
-            TokenKind::RightParen => "RightParen",
-            TokenKind::LeftBrace => "LeftBrace",
-            TokenKind::RightBrace => "RightBrace",
+            TokenKind::OpenParen => "OpenParen",
+            TokenKind::CloseParen => "CloseParen",
+            TokenKind::OpenBrace => "OpenBrace",
+            TokenKind::CloseBrace => "CloseBrace",
             TokenKind::Comma => "Comma",
             TokenKind::Dot => "Dot",
             TokenKind::Minus => "Minus",

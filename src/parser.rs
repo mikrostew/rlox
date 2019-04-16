@@ -212,7 +212,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::LeftParen,
+            TokenKind::OpenParen,
             &format!("expected `(` after {} name", kind),
             &todo_token,
         )?;
@@ -223,7 +223,7 @@ impl Parser {
         if let Some(token) = tokens.peek() {
             match token.kind {
                 // if there are no params, skip parsing them
-                TokenKind::RightParen => (),
+                TokenKind::CloseParen => (),
                 // otherwise keep parsing the comma-separated params
                 _ => {
                     loop {
@@ -271,7 +271,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightParen,
+            TokenKind::CloseParen,
             &format!("expected `)` after {} parameters", kind),
             &todo_token,
         )?;
@@ -282,7 +282,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::LeftBrace,
+            TokenKind::OpenBrace,
             &format!("expected `{{` before {} body", kind),
             &todo_token,
         )?;
@@ -351,7 +351,7 @@ impl Parser {
                     tokens.next();
                     Ok(Some(self.while_statement(tokens)?))
                 }
-                TokenKind::LeftBrace => {
+                TokenKind::OpenBrace => {
                     // consume the token and parse the print statement
                     tokens.next();
                     Ok(Some(self.block_statement(tokens)?))
@@ -380,7 +380,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::LeftParen,
+            TokenKind::OpenParen,
             "expected `(` after `for`",
             &todo_token,
         )?;
@@ -420,7 +420,7 @@ impl Parser {
 
         let increment = if let Some(token) = tokens.peek() {
             match token.kind {
-                TokenKind::RightParen => None,
+                TokenKind::CloseParen => None,
                 _ => Some(self.expression(tokens)?),
             }
         } else {
@@ -431,7 +431,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightParen,
+            TokenKind::CloseParen,
             "expected `)` after `for` clauses",
             &todo_token,
         )?;
@@ -474,7 +474,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::LeftParen,
+            TokenKind::OpenParen,
             "expected `(` after `if`",
             &todo_token,
         )?;
@@ -485,7 +485,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightParen,
+            TokenKind::CloseParen,
             "expected `)` after if condition",
             &todo_token,
         )?;
@@ -539,7 +539,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::LeftParen,
+            TokenKind::OpenParen,
             "expected `(` after while",
             &todo_token,
         )?;
@@ -550,7 +550,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightParen,
+            TokenKind::CloseParen,
             "expected `)` after condition",
             &todo_token,
         )?;
@@ -575,7 +575,7 @@ impl Parser {
             if let Some(token) = tokens.peek() {
                 match token.kind {
                     // exit once we find the right brace
-                    TokenKind::RightBrace => break,
+                    TokenKind::CloseBrace => break,
                     // otherwise parse the statements
                     _ => match self.declaration(tokens)? {
                         Some(stmt) => statements.push(stmt),
@@ -592,7 +592,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightBrace,
+            TokenKind::CloseBrace,
             "expected `}` after block",
             &todo_token,
         )?;
@@ -694,8 +694,8 @@ impl Parser {
         loop {
             if let Some(token) = tokens.peek() {
                 match token.kind {
-                    TokenKind::LeftParen => {
-                        // consume the left paren and finish the call
+                    TokenKind::OpenParen => {
+                        // consume the open paren and finish the call
                         tokens.next();
                         expr = self.finish_call(expr, tokens)?;
                     }
@@ -721,7 +721,7 @@ impl Parser {
         if let Some(token) = tokens.peek() {
             match token.kind {
                 // if there are no args, skip parsing them
-                TokenKind::RightParen => (),
+                TokenKind::CloseParen => (),
                 // otherwise keep parsing the comma-separated args
                 _ => {
                     loop {
@@ -760,7 +760,7 @@ impl Parser {
         let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
-            TokenKind::RightParen,
+            TokenKind::CloseParen,
             "expected `)` after arguments",
             &todo_token,
         )?;
@@ -777,11 +777,11 @@ impl Parser {
                 TokenKind::Nil => Expr::Literal(Literal::Nil),
                 TokenKind::Number(n) => Expr::Literal(Literal::Number(*n)),
                 TokenKind::String(s) => Expr::Literal(Literal::String(s.to_string())),
-                TokenKind::LeftParen => {
+                TokenKind::OpenParen => {
                     let expr = self.expression(tokens)?;
                     self.consume_or_err(
                         tokens,
-                        TokenKind::RightParen,
+                        TokenKind::CloseParen,
                         "missing closing `)`",
                         &token,
                     )?;

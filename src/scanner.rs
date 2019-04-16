@@ -93,10 +93,10 @@ impl Scanner {
         let current_char = self.advance(chars, pos);
         match current_char {
             // single characters
-            Some('(') => self.make_token(TokenKind::LeftParen, "(", pos),
-            Some(')') => self.make_token(TokenKind::RightParen, ")", pos),
-            Some('{') => self.make_token(TokenKind::LeftBrace, "{", pos),
-            Some('}') => self.make_token(TokenKind::RightBrace, "}", pos),
+            Some('(') => self.make_token(TokenKind::OpenParen, "(", pos),
+            Some(')') => self.make_token(TokenKind::CloseParen, ")", pos),
+            Some('{') => self.make_token(TokenKind::OpenBrace, "{", pos),
+            Some('}') => self.make_token(TokenKind::CloseBrace, "}", pos),
             Some(',') => self.make_token(TokenKind::Comma, ",", pos),
             Some('.') => self.make_token(TokenKind::Dot, ".", pos),
             Some('-') => self.make_token(TokenKind::Minus, "-", pos),
