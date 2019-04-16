@@ -1,5 +1,6 @@
 use std::fmt;
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ast::{BinaryOp, Expr, Literal, LogicalOp, Stmt, UnaryOp, Visitor};
 use crate::environment::Environment;
@@ -10,9 +11,8 @@ use crate::token::Position;
 pub enum Object {
     Bool(bool),
     Function(LoxFunction),
+    NativeFunction(LoxNativeFunction),
     Nil,
-    // this doesn't really work - need to contain some kind of struct
-    NativeFunction(String, u32, Box<fn() -> Object>), // name, arity, function
     Number(f64),
     String(String),
 }
@@ -42,11 +42,11 @@ impl Object {
         }
     }
 
-    // TODO: input the position to this mess
-    pub fn to_callable(self) -> Result<impl Callable, String> {
+    // TODO: input the position to this, like the functions above
+    pub fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String> {
         match self {
-            Object::Function(f) => Ok(f),
-            // TODO: native functions as well
+            Object::Function(f) => f.call(interpreter, args),
+            Object::NativeFunction(f) => f.call(interpreter, args),
             _ => Err(format!(
                 "[positionTBD] can only call functions and methods, {} is neither",
                 self
@@ -61,19 +61,18 @@ impl fmt::Display for Object {
             Object::Bool(b) => write!(f, "{}", b),
             Object::Function(fun) => write!(f, "<fn {}>", fun.name),
             Object::Nil => write!(f, "nil"),
-            // TODO:
-            Object::NativeFunction(name, _, _) => write!(f, "<nativefn {}>", name),
+            Object::NativeFunction(fun) => write!(f, "<nativefn {}>", fun.name),
             Object::Number(n) => write!(f, "{}", n),
             Object::String(s) => write!(f, "{}", s),
         }
     }
 }
 
-// TODO: not sure how I want to handle these exactly...
-pub trait Callable {
-    fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String>;
-    fn arity(self) -> usize;
-}
+// TODO: don't think I need this
+// pub trait Callable {
+//     fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String>;
+//     fn arity(self) -> usize;
+// }
 
 #[derive(PartialEq, Clone)]
 pub struct LoxFunction {
@@ -97,11 +96,14 @@ impl LoxFunction {
             closure: Rc::clone(closure),
         }
     }
-}
 
-impl Callable for LoxFunction {
     fn call(self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String> {
         let env = Environment::new(Some(self.closure));
+
+        // check number of args
+        if self.params.len() != args.len() {
+            return Err(format!("Expected {} arguments, got {}", self.params.len(), args.len()));
+        }
 
         for (i, param) in self.params.iter().enumerate() {
             env.define(param, args[i].to_owned());
@@ -111,8 +113,36 @@ impl Callable for LoxFunction {
 
         Ok(Object::Nil)
     }
-    fn arity(self) -> usize {
-        self.params.len()
+}
+
+#[derive(PartialEq, Clone)]
+pub struct LoxNativeFunction {
+    name: String,
+    params: Vec<String>,
+    function: fn(Vec<Object>) -> Result<Object, String>,
+}
+
+impl LoxNativeFunction {
+    pub fn new(
+        name: String,
+        params: Vec<String>,
+        function: fn(Vec<Object>) -> Result<Object, String>,
+    ) -> Self {
+        LoxNativeFunction {
+            name,
+            params,
+            function,
+        }
+    }
+
+    fn call(self, _interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, String> {
+        // check number of args
+        if self.params.len() != args.len() {
+            return Err(format!("Expected {} arguments, got {}", self.params.len(), args.len()));
+        }
+
+        // call the function
+        (self.function)(args)
     }
 }
 
@@ -125,14 +155,20 @@ impl Interpreter {
     pub fn new() -> Self {
         let globals = Environment::new(None);
 
-        // define global functions
+        // global functions
 
-        fn clock_fn() -> Object {
-            Object::Number(12.2)
+
+
+        // clock() - get time since epoch in seconds (with ms after the decimal)
+        fn clock_fn(_args: Vec<Object>) -> Result<Object, String> {
+            let now = SystemTime::now();
+            let time_since_epoch = now.duration_since(UNIX_EPOCH).expect("failed to get clock time");
+            let time_in_seconds = time_since_epoch.as_millis() as f64 / 1000.0;
+
+            Ok(Object::Number(time_in_seconds))
         }
-        let clock_obj = Object::NativeFunction("clock".to_string(), 0, Box::new(clock_fn));
-
-        globals.define(&"clock".to_string(), clock_obj);
+        let clock = LoxNativeFunction::new("clock".to_string(), Vec::new(), clock_fn);
+        globals.define(&"clock".to_string(), Object::NativeFunction(clock));
 
         Interpreter {
             environment: globals,
@@ -277,7 +313,6 @@ impl Visitor<Object> for Interpreter {
                 // first evaluate the expression for the callee
                 // (usually just an identifier, but could be anything)
                 let callee = self.evaluate(callee_expr, env)?;
-                let callable = callee.to_callable()?;
 
                 // then evaluate each of the argument expressions in order,
                 // storing the resulting values
@@ -287,8 +322,7 @@ impl Visitor<Object> for Interpreter {
                 }
 
                 // call the function
-                // TODO: check arity here? (http://www.craftinginterpreters.com/functions.html#checking-arity)
-                callable.call(self, arguments)
+                callee.call(self, arguments)
             }
             // for a group, evaluate the inner expression
             Expr::Grouping(ref expr) => self.evaluate(expr, env),
