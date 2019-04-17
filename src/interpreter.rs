@@ -274,14 +274,14 @@ impl Visitor<Object> for Interpreter {
 
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<Object, String> {
         match e {
-            Expr::Assign(var_name, ref expr) => {
+            Expr::Assign(_pos, var_name, ref expr) => {
                 // variable assignment
                 // evaluate the value and assign to the variable, returning the value
                 let value = self.evaluate(expr, env)?;
                 env.assign(var_name, value.clone())?;
                 Ok(value)
             }
-            Expr::Binary(ref expr1, op, ref expr2) => {
+            Expr::Binary(_pos, ref expr1, op, ref expr2) => {
                 let left = self.evaluate(expr1, env)?;
                 let right = self.evaluate(expr2, env)?;
 
@@ -317,7 +317,7 @@ impl Visitor<Object> for Interpreter {
                 })
             }
             // function/method call
-            Expr::Call(ref callee_expr, args) => {
+            Expr::Call(_pos, ref callee_expr, args) => {
                 // first evaluate the expression for the callee
                 // (usually just an identifier, but could be anything)
                 let callee = self.evaluate(callee_expr, env)?;
@@ -333,10 +333,10 @@ impl Visitor<Object> for Interpreter {
                 callee.call(self, arguments)
             }
             // for a group, evaluate the inner expression
-            Expr::Grouping(ref expr) => self.evaluate(expr, env),
+            Expr::Grouping(_pos, ref expr) => self.evaluate(expr, env),
             // for a literal, visit the literal
-            Expr::Literal(lit) => lit.accept(self, env),
-            Expr::Logical(ref expr1, op, ref expr2) => {
+            Expr::Literal(_pos, lit) => lit.accept(self, env),
+            Expr::Logical(_pos, ref expr1, op, ref expr2) => {
                 // see if we can short-circuit
                 let left = self.evaluate(expr1, env)?;
                 match op {
@@ -355,14 +355,14 @@ impl Visitor<Object> for Interpreter {
                 // if we can't short-circuit, return result of right
                 self.evaluate(expr2, env)
             }
-            Expr::Unary(op, ref expr) => {
+            Expr::Unary(_pos, op, ref expr) => {
                 let right = self.evaluate(expr, env)?;
                 Ok(match op {
                     UnaryOp::Minus(pos) => Object::Number(-right.as_number(pos)?),
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
-            Expr::Variable(name) => env.get(name),
+            Expr::Variable(_pos, name) => env.get(name),
         }
     }
 

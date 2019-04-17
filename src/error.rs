@@ -1,8 +1,7 @@
 use crate::token::Position;
 
 pub trait Reporter {
-    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position, _length: u64)
-        -> String;
+    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position) -> String;
 }
 
 // pub struct BasicReporter {}
@@ -36,13 +35,18 @@ impl BetterReporter {
 // report an error similar to cargo's format:
 //
 // error: attempted to take value of method `had_error` on type `&Lox`
-//   --> 99:14
+//   --> somefile.lox:99:14
 //    |
 // 99 |         self.had_error
 //    |              ^^^^^^^^^ add `()`?
 //
 impl Reporter for BetterReporter {
-    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position, length: u64) -> String {
+    fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position) -> String {
+        let file = match &pos.file {
+            Some(f) => f.clone(),
+            None => "(input)".to_string(),
+        };
+        let length = pos.length;
         let line = pos.line;
         let mut col = pos.column;
 
@@ -52,8 +56,7 @@ impl Reporter for BetterReporter {
         }
 
         eprintln!("error: {}", error_msg);
-        // TODO: include file name from Position
-        eprintln!("  --> {}:{}", line, col);
+        eprintln!("  --> {}:{}:{}", file, line, col);
 
         // TODO: figure out the number of digits in the line number
         // (for now, just assume max of 3 digits)

@@ -6,6 +6,9 @@ use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
 pub struct Scanner {
+    // file that is being scanned
+    file: Option<String>,
+    // source of the file, or input from REPL
     source: String,
     // reporter that implements this trait
     err_reporter: Box<Reporter>,
@@ -14,8 +17,13 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new<R: Reporter + 'static>(source: String, err_reporter: R) -> Self {
+    pub fn new<R: Reporter + 'static>(
+        file: Option<String>,
+        source: String,
+        err_reporter: R,
+    ) -> Self {
         Scanner {
+            file,
             source,
             err_reporter: Box::new(err_reporter),
             num_errors: 0,
@@ -26,7 +34,7 @@ impl Scanner {
         let mut tokens = Vec::new();
         let source = self.source.clone();
         let mut chars = source.chars().peekable();
-        let mut position = Position::new();
+        let mut position = Position::new(self.file.clone());
 
         // scan tokens until EOF is reached
         loop {
@@ -176,7 +184,6 @@ impl Scanner {
                                     "unterminated block comment",
                                     "expected matching `*/`",
                                     &start_pos,
-                                    2,
                                 );
                                 return Err(report_string);
                             }
@@ -214,7 +221,6 @@ impl Scanner {
                     &format!("unexpected character `{}`", c),
                     "unexpected char",
                     pos,
-                    1, // length of single char is 1
                 );
                 Err(report_string)
             }
@@ -227,7 +233,7 @@ impl Scanner {
         chars: &mut Peekable<Chars>,
         pos: &mut Position,
     ) -> Result<Option<Token>, String> {
-        // keep track of start posiition (for error reporting)
+        // keep track of start position (for error reporting)
         let start_pos = pos.clone();
 
         let mut string_chars = String::new();
@@ -254,9 +260,9 @@ impl Scanner {
                     // report and return error (no token created)
                     let report_string = self.err_reporter.report(
                         "unterminated string",
-                        "expected closing `\"`",
+                        r#"expected closing `"`"#,
                         &start_pos,
-                        1 + string_chars.len() as u64, // string plus the first `"`
+                        // 1 + string_chars.len() as u64, // string plus the first `"`
                     );
                     return Err(report_string);
                 }
@@ -326,19 +332,18 @@ impl Scanner {
                                 &format!("expected digit after decimal, found `{}`", c),
                                 "expected digit",
                                 pos,
-                                1,
                             );
                             return Err(report_string);
                         }
                         None => {
                             // report the right location
                             pos.next_char();
+
                             // report and return error (no token created)
                             let report_string = self.err_reporter.report(
                                 "expected digit after decimal, found EOF",
                                 "expected digit",
                                 pos,
-                                1,
                             );
                             return Err(report_string);
                         }
@@ -357,12 +362,13 @@ impl Scanner {
         f64::from_str(&digit_string).map_err(|e| {
             // figure out the right position and length
             let length = digit_string.len() as u64;
+            let mut err_pos = pos.clone();
+            err_pos.adjust(length);
 
             let report_string = self.err_reporter.report(
                 &format!("Could not parse number: {}", e.to_string()),
                 "could not parse",
                 pos,
-                length,
             );
             report_string
         })

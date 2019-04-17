@@ -23,7 +23,7 @@ impl Lox {
         let mut lox = Lox::new();
         // TODO: error reporter for this
         let mut interpreter = Interpreter::new();
-        match lox.run(&script_contents, &mut interpreter) {
+        match lox.run(Some(path.to_string()), &script_contents, &mut interpreter) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("Error: {}", e);
@@ -56,7 +56,7 @@ impl Lox {
                     let trimmed = input.trim();
                     // TODO: it would be nice to support entering an expression and printing the resulting value, instead of requiring a statement
                     // (see http://www.craftinginterpreters.com/statements-and-state.html#challenges)
-                    match lox.run(trimmed, &mut interpreter) {
+                    match lox.run(None, trimmed, &mut interpreter) {
                         Ok(_) => (),
                         Err(e) => {
                             // print the error, but don't exit the interpreter
@@ -74,7 +74,12 @@ impl Lox {
     }
 
     // Run the input text
-    fn run(&mut self, source: &str, interpreter: &mut Interpreter) -> Result<(), String> {
+    fn run(
+        &mut self,
+        file: Option<String>,
+        source: &str,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), String> {
         // TODO: add debug command line option --debug-source
         println!("source:");
         println!("```");
@@ -85,7 +90,7 @@ impl Lox {
         // TODO: creating 2 reporters here, but not sure how else to do this at the moment
         // (because they would share the same string on the heap, which doesn't work)
         let err_reporter1 = error::BetterReporter::new(source.to_string());
-        let scanner = Scanner::new(source.to_string(), err_reporter1);
+        let scanner = Scanner::new(file.clone(), source.to_string(), err_reporter1);
         let tokens = scanner.scan_tokens()?;
 
         // TODO: add this as a command line option (--show-tokens or --debug-tokens)
@@ -96,7 +101,7 @@ impl Lox {
         // println!("");
 
         let err_reporter2 = error::BetterReporter::new(source.to_string());
-        let parser = Parser::new(tokens, err_reporter2);
+        let parser = Parser::new(file.clone(), tokens, err_reporter2);
         let statements = parser.parse()?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)

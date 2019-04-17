@@ -3,20 +3,36 @@ use std::fmt;
 // keep track of current location
 #[derive(Clone, Debug, PartialEq)]
 pub struct Position {
-    // TODO: will need file path?
+    // path to file
+    pub file: Option<String>,
     // current line number
     pub line: u64,
     // current column
     pub column: u64,
-    // TODO: this should include length (instead of it being separate, like it is now)
+    // length of token or expression or whatever
+    pub length: u64,
 }
 
 impl Position {
-    pub fn new() -> Self {
+    pub fn new(file: Option<String>) -> Self {
         Position {
+            file,
             // start at the beginning of everything
             line: 1,
             column: 0,
+            length: 1, // TODO: start at 0?
+        }
+    }
+
+    pub fn from_positions(p1: Position, p2: Position) -> Self {
+        Position {
+            // TODO: for now, assume they are in the same file
+            file: p1.file,
+            // TODO: and on the same line
+            line: p1.line,
+            // column starts at p1's column
+            column: p1.column,
+            length: p2.column - p1.column,
         }
     }
 
@@ -194,10 +210,8 @@ pub struct Token {
     pub kind: TokenKind,
     // the raw characters from the input
     pub lexeme: String,
-    // line and column where the token appears
+    // where the token appears: file, line, col, length
     pub position: Position,
-    // length of the token
-    pub length: u64,
 }
 
 impl Token {
@@ -210,13 +224,12 @@ impl Token {
 
         // scan position is at the end of the scanned token, so adjust that accordingly
         let mut position = pos.clone();
-        position.adjust(length);
+        position.adjust(length); // TODO: this should set the length of the position
 
         Token {
             kind,
             lexeme: lexeme.to_string(),
             position,
-            length,
         }
     }
 
@@ -233,10 +246,6 @@ impl fmt::Display for Token {
 
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} `{}` {}, len{}",
-            self.kind, self.lexeme, self.position, self.length
-        )
+        write!(f, "{} `{}` {}", self.kind, self.lexeme, self.position)
     }
 }

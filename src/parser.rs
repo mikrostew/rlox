@@ -7,6 +7,8 @@ use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
 pub struct Parser {
+    // file that is being parsed (None if it's the REPL)
+    file: Option<String>,
     // reporter that implements this trait
     err_reporter: Box<Reporter>,
     // how many errors the scanner encountered
@@ -22,7 +24,8 @@ macro_rules! binary_expr_parser {
             let mut expr = self.$next_fn(tokens)?;
             while let Some(operator) = Parser::$match_ops(tokens) {
                 let right = self.$next_fn(tokens)?;
-                expr = Expr::$expr_kind(Box::new(expr), operator, Box::new(right));
+                let expr_pos = Position::from_positions(expr.position(), right.position());
+                expr = Expr::$expr_kind(expr_pos, Box::new(expr), operator, Box::new(right));
             }
             Ok(expr)
         }
@@ -123,8 +126,13 @@ impl fmt::Display for FunKind {
 //
 // arguments      → expression ( "," expression )* ;
 impl Parser {
-    pub fn new<R: Reporter + 'static>(tokens: Vec<Token>, err_reporter: R) -> Self {
+    pub fn new<R: Reporter + 'static>(
+        file: Option<String>,
+        tokens: Vec<Token>,
+        err_reporter: R,
+    ) -> Self {
         Parser {
+            file,
             tokens,
             err_reporter: Box::new(err_reporter),
             num_errors: 0,
@@ -199,22 +207,16 @@ impl Parser {
 
     // function → IDENTIFIER "(" parameters? ")" block ;
     fn function(&self, kind: FunKind, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
-        // TODO: this should be the position of the function name
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         let name = self.consume_or_err(
             tokens,
             TokenKind::Identifier("".to_string()),
             &format!("expected {} name", kind),
-            &todo_token,
         )?;
 
-        // TODO: this should be the position of the paren
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::OpenParen,
             &format!("expected `(` after {} name", kind),
-            &todo_token,
         )?;
 
         let mut parameters = Vec::new();
@@ -227,27 +229,22 @@ impl Parser {
                 // otherwise keep parsing the comma-separated params
                 _ => {
                     loop {
-                        // TODO: this should be the position of the param
-                        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
                         let param = self.consume_or_err(
                             tokens,
                             TokenKind::Identifier("".to_string()),
                             &format!("expected parameter name"),
-                            &todo_token,
                         )?;
 
                         // only supports 8 arguments max
                         if parameters.len() >= 8 {
                             // just report the error - don't need to stop parsing & synchronize
-                            // TODO: this should really be the position of the argument
-                            let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
+
                             // TODO: and, this should call some kind of self.error() function,
                             // which can set an error flag (this will not actually stop the parser, oops)
                             self.err_reporter.report(
                                 "cannot have more than 8 parameters",
                                 "this param",
-                                &todo_token.position,
-                                todo_token.length,
+                                &param.position, // TODO: add position to this
                             );
                         }
 
@@ -267,24 +264,18 @@ impl Parser {
             }
         }
 
-        // TODO: this should be the position of the closing paren
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::CloseParen,
             &format!("expected `)` after {} parameters", kind),
-            &todo_token,
         )?;
 
         // parse the function body
 
-        // TODO: this should be the position of the opening brace
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::OpenBrace,
             &format!("expected `{{` before {} body", kind),
-            &todo_token,
         )?;
 
         let body = self.block_statement(tokens)?;
@@ -294,17 +285,14 @@ impl Parser {
 
     // var_decl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn var_declaration(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
-        // TODO: this should really be the position of the expression/declaration itself
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         let name = self.consume_or_err(
             tokens,
             TokenKind::Identifier("".to_string()),
             "expected variable name",
-            &todo_token,
         )?;
 
         // assume nil unless an expression is given
-        let mut initializer = Expr::Literal(Literal::Nil);
+        let mut initializer = Expr::Literal(name.position.clone(), Literal::Nil);
 
         // TODO: there should be a match() function (like in the book) to do these 3 lines
         if let Some(token) = tokens.peek() {
@@ -314,13 +302,10 @@ impl Parser {
             }
         }
 
-        // TODO: this should really be the position of the expression/declaration itself
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::Semicolon,
             "expected `;` after variable declaration",
-            &todo_token,
         )?;
 
         Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
@@ -376,14 +361,8 @@ impl Parser {
     //               expression?
     //            ")" statement ;
     fn for_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
-        // TODO: this should be the actual position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
-            tokens,
-            TokenKind::OpenParen,
-            "expected `(` after `for`",
-            &todo_token,
-        )?;
+        let open_paren =
+            self.consume_or_err(tokens, TokenKind::OpenParen, "expected `(` after `for`")?;
 
         let initializer = if let Some(token) = tokens.peek() {
             match token.kind {
@@ -409,13 +388,10 @@ impl Parser {
             // no more tokens, no condition
             None
         };
-        // TODO: this should be the actual position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::Semicolon,
             "expected `;` after loop condition",
-            &todo_token,
         )?;
 
         let increment = if let Some(token) = tokens.peek() {
@@ -427,14 +403,12 @@ impl Parser {
             // no more tokens, no increment
             None
         };
-        // TODO: this should be the actual position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
+        let close_paren = self.consume_or_err(
             tokens,
             TokenKind::CloseParen,
             "expected `)` after `for` clauses",
-            &todo_token,
         )?;
+        let for_pos = Position::from_positions(open_paren.position, close_paren.position);
 
         // optional loop body (if nothing, default to an empty block)
         let body = self.statement(tokens)?.unwrap_or(Stmt::Block(Vec::new()));
@@ -452,7 +426,7 @@ impl Parser {
             // if there is a condition, use it, otherwise no condition == true
             Some(cond) => Stmt::While(Box::new(cond), Box::new(loop_body)),
             None => Stmt::While(
-                Box::new(Expr::Literal(Literal::Bool(true))),
+                Box::new(Expr::Literal(for_pos, Literal::Bool(true))),
                 Box::new(loop_body),
             ),
         };
@@ -470,24 +444,14 @@ impl Parser {
 
     // if_stmt → "if" "(" expression ")" statement ( "else" statement )? ;
     fn if_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
-        // TODO: this should be the actual position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
-            tokens,
-            TokenKind::OpenParen,
-            "expected `(` after `if`",
-            &todo_token,
-        )?;
+        self.consume_or_err(tokens, TokenKind::OpenParen, "expected `(` after `if`")?;
 
         let condition = self.expression(tokens)?;
 
-        // TODO: this should be the actual position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::CloseParen,
             "expected `)` after if condition",
-            &todo_token,
         )?;
 
         let then_branch = self
@@ -522,37 +486,24 @@ impl Parser {
     // print_stmt → "print" expression ";" ;
     fn print_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
         let value = self.expression(tokens)?;
-        // TODO: this should really be the position of the expression itself
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::Semicolon,
             "expected `;` at end of statement",
-            &todo_token,
         )?;
         Ok(Stmt::Print(Box::new(value)))
     }
 
     // while_stmt → "while" "(" expression ")" statement ;
     fn while_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
-        // TODO: this should be at the correct position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
-            tokens,
-            TokenKind::OpenParen,
-            "expected `(` after while",
-            &todo_token,
-        )?;
+        self.consume_or_err(tokens, TokenKind::OpenParen, "expected `(` after while")?;
 
         let condition = self.expression(tokens)?;
 
-        // TODO: this should be at the correct position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::CloseParen,
             "expected `)` after condition",
-            &todo_token,
         )?;
 
         let body = match self.statement(tokens)? {
@@ -588,14 +539,7 @@ impl Parser {
             }
         }
 
-        // TODO: this should be at the correct position
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
-            tokens,
-            TokenKind::CloseBrace,
-            "expected `}` after block",
-            &todo_token,
-        )?;
+        self.consume_or_err(tokens, TokenKind::CloseBrace, "expected `}` after block")?;
 
         Ok(Stmt::Block(statements))
     }
@@ -603,13 +547,10 @@ impl Parser {
     // expr_stmt → expression ";" ;
     fn expression_statement(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Stmt, String> {
         let expr = self.expression(tokens)?;
-        // TODO: see same thing above
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
         self.consume_or_err(
             tokens,
             TokenKind::Semicolon,
             "expected `;` at end of statement",
-            &todo_token,
         )?;
         Ok(Stmt::Expression(Box::new(expr)))
     }
@@ -636,15 +577,15 @@ impl Parser {
 
                 // check left hand side is valid assignment target
                 match l_value {
-                    Expr::Variable(name) => {
-                        return Ok(Expr::Assign(name.clone(), Box::new(r_value)));
+                    Expr::Variable(pos, name) => {
+                        let expr_pos = Position::from_positions(pos, r_value.position());
+                        return Ok(Expr::Assign(expr_pos, name.clone(), Box::new(r_value)));
                     }
                     _ => {
                         let report_string = self.err_reporter.report(
                             "invalid assignment target",
                             "for this assignment",
                             &equal.position,
-                            equal.length,
                         );
                         return Err(report_string);
                     }
@@ -678,7 +619,7 @@ impl Parser {
     fn unary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(operator) = Parser::match_unary_op(tokens) {
             let right = self.unary(tokens)?;
-            return Ok(Expr::Unary(operator, Box::new(right)));
+            return Ok(Expr::Unary(right.position(), operator, Box::new(right)));
         }
 
         // if it's not a unary, bubble up to the call syntax
@@ -729,15 +670,13 @@ impl Parser {
                         // only supports 8 arguments max
                         if args.len() >= 8 {
                             // just report the error - don't need to stop parsing & synchronize
-                            // TODO: this should really be the position of the argument
-                            let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-                            // TODO: and, this should call some kind of self.error() function,
-                            // which can set an error flag (this will not actually stop the parser, oops)
+
+                            // TODO: this should call some kind of self.error() function,
+                            // which can set an error count (currently this will not actually stop after parsing, oops)
                             self.err_reporter.report(
                                 "cannot have more than 8 arguments",
                                 "this argument",
-                                &todo_token.position,
-                                todo_token.length,
+                                &arg.position(),
                             );
                         }
                         args.push(Box::new(arg));
@@ -756,44 +695,39 @@ impl Parser {
             }
         }
 
-        // TODO: this should really be the position of where the closing paren should be
-        let todo_token = Token::new(TokenKind::Nil, "nil", &Position::new());
-        self.consume_or_err(
+        let close_paren = self.consume_or_err(
             tokens,
             TokenKind::CloseParen,
             "expected `)` after arguments",
-            &todo_token,
         )?;
 
-        Ok(Expr::Call(Box::new(callee), args))
+        // TODO: need to construct a position from one token to another (based on their positions)
+        let expr_pos = Position::from_positions(callee.position(), close_paren.position);
+        Ok(Expr::Call(expr_pos, Box::new(callee), args))
     }
 
     // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ;
     fn primary(&self, tokens: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
         if let Some(token) = tokens.next() {
             Ok(match &token.kind {
-                TokenKind::False => Expr::Literal(Literal::Bool(false)),
-                TokenKind::True => Expr::Literal(Literal::Bool(true)),
-                TokenKind::Nil => Expr::Literal(Literal::Nil),
-                TokenKind::Number(n) => Expr::Literal(Literal::Number(*n)),
-                TokenKind::String(s) => Expr::Literal(Literal::String(s.to_string())),
+                TokenKind::False => Expr::Literal(token.position.clone(), Literal::Bool(false)),
+                TokenKind::True => Expr::Literal(token.position.clone(), Literal::Bool(true)),
+                TokenKind::Nil => Expr::Literal(token.position.clone(), Literal::Nil),
+                TokenKind::Number(n) => Expr::Literal(token.position.clone(), Literal::Number(*n)),
+                TokenKind::String(s) => {
+                    Expr::Literal(token.position.clone(), Literal::String(s.to_string()))
+                }
                 TokenKind::OpenParen => {
                     let expr = self.expression(tokens)?;
-                    self.consume_or_err(
-                        tokens,
-                        TokenKind::CloseParen,
-                        "missing closing `)`",
-                        &token,
-                    )?;
-                    Expr::Grouping(Box::new(expr))
+                    self.consume_or_err(tokens, TokenKind::CloseParen, "missing closing `)`")?;
+                    Expr::Grouping(expr.position(), Box::new(expr))
                 }
-                TokenKind::Identifier(s) => Expr::Variable(s.to_string()),
+                TokenKind::Identifier(s) => Expr::Variable(token.position.clone(), s.to_string()),
                 _ => {
                     let report_string = self.err_reporter.report(
                         &format!("expected literal or `(`, found `{}`", token),
                         &format!("unexpected"),
                         &token.position,
-                        token.length,
                     );
                     return Err(report_string);
                 }
@@ -803,8 +737,7 @@ impl Parser {
             let report_string = self.err_reporter.report(
                 "expected literal or `(`, found nothing",
                 "expected literal",
-                &Position::new(),
-                1,
+                &Position::new(self.file.clone()),
             );
             return Err(report_string);
         }
@@ -846,8 +779,10 @@ impl Parser {
         tokens: &mut Peekable<Iter<Token>>,
         kind: TokenKind,
         err: &str,
-        err_token: &Token,
     ) -> Result<Token, String> {
+        // position of the error for reporting
+        let error_pos;
+
         if let Some(&token) = tokens.peek() {
             match kind {
                 // TODO
@@ -863,6 +798,8 @@ impl Parser {
                             .cloned()
                             .expect("could not consume token after peeking"));
                     }
+                    // otherwise, it's the wrong thing - use that position
+                    error_pos = token.position.clone();
                 }
                 _ => {
                     if token.kind == kind {
@@ -873,12 +810,16 @@ impl Parser {
                             // TODO: parser should not panic (this should be an error)
                             .expect("could not consume token after peeking"));
                     }
+                    // otherwise, it's the wrong thing - use that position
+                    error_pos = token.position.clone();
                 }
             }
+        } else {
+            // TODO: else, no tokens, how to report the EOF position?
+            error_pos = Position::new(self.file.clone());
         }
-        let report_string =
-            self.err_reporter
-                .report(err, err, &err_token.position, err_token.length);
+
+        let report_string = self.err_reporter.report(err, err, &error_pos);
         Err(report_string)
     }
 

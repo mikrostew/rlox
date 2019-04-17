@@ -30,19 +30,16 @@ impl Stmt {
     }
 }
 
-// TODO: all of these should implement some kind of "Position" trait, so that they have a
-// .position() method which gives the line, col, and length (for error reporting niceness)
-// (so, maybe these should be structs...)
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Assign(String, Box<Expr>), // name, value
-    Binary(Box<Expr>, BinaryOp, Box<Expr>),
-    Call(Box<Expr>, Vec<Box<Expr>>), // callee (thing being called), arguments
-    Grouping(Box<Expr>),
-    Literal(Literal),
-    Logical(Box<Expr>, LogicalOp, Box<Expr>),
-    Unary(UnaryOp, Box<Expr>),
-    Variable(String), // name
+    Assign(Position, String, Box<Expr>), // name, value
+    Binary(Position, Box<Expr>, BinaryOp, Box<Expr>),
+    Call(Position, Box<Expr>, Vec<Box<Expr>>), // callee (thing being called), arguments
+    Grouping(Position, Box<Expr>),
+    Literal(Position, Literal),
+    Logical(Position, Box<Expr>, LogicalOp, Box<Expr>),
+    Unary(Position, UnaryOp, Box<Expr>),
+    Variable(Position, String), // name
 }
 
 impl Expr {
@@ -52,6 +49,20 @@ impl Expr {
         env: &Rc<Environment>,
     ) -> Result<T, String> {
         visitor.visit_expr(self, env)
+    }
+
+    pub fn position(&self) -> Position {
+        match self {
+            Expr::Assign(p, _, _) => p,
+            Expr::Binary(p, _, _, _) => p,
+            Expr::Call(p, _, _) => p,
+            Expr::Grouping(p, _) => p,
+            Expr::Literal(p, _) => p,
+            Expr::Logical(p, _, _, _) => p,
+            Expr::Unary(p, _, _) => p,
+            Expr::Variable(p, _) => p,
+        }
+        .clone()
     }
 }
 
@@ -206,16 +217,16 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match e {
-            Expr::Assign(var_name, ref expr) => {
+            Expr::Assign(_pos, var_name, ref expr) => {
                 format!("{} = {}", var_name, expr.accept(self, env)?,)
             }
-            Expr::Binary(ref expr1, token, ref expr2) => format!(
+            Expr::Binary(_pos, ref expr1, token, ref expr2) => format!(
                 "({} {} {})",
                 expr1.accept(self, env)?,
                 token,
                 expr2.accept(self, env)?
             ),
-            Expr::Call(ref callee_expr, args) => {
+            Expr::Call(_pos, ref callee_expr, args) => {
                 // TODO: join a vec of strings with commas
                 let arg_string = args
                     .into_iter()
@@ -227,16 +238,16 @@ impl Visitor<String> for AstPrinter {
                     .join(", ");
                 format!("{}({})", callee_expr.accept(self, env)?, arg_string)
             }
-            Expr::Grouping(ref expr) => format!("({})", expr.accept(self, env)?),
-            Expr::Literal(lit) => lit.accept(self, env)?,
-            Expr::Logical(ref expr1, op, ref expr2) => format!(
+            Expr::Grouping(_pos, ref expr) => format!("({})", expr.accept(self, env)?),
+            Expr::Literal(_pos, lit) => lit.accept(self, env)?,
+            Expr::Logical(_pos, ref expr1, op, ref expr2) => format!(
                 "({} {} {})",
                 expr1.accept(self, env)?,
                 op,
                 expr2.accept(self, env)?
             ),
-            Expr::Unary(op, ref expr) => format!("({} {})", op, expr.accept(self, env)?),
-            Expr::Variable(name) => format!("{}", name),
+            Expr::Unary(_pos, op, ref expr) => format!("({} {})", op, expr.accept(self, env)?),
+            Expr::Variable(_pos, name) => format!("{}", name),
         })
     }
 
