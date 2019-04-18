@@ -1,4 +1,11 @@
+use crate::interpreter::Object;
 use crate::token::Position;
+
+// type to support either error result, or return value that needs to unwind the stack
+pub enum LoxErr {
+    Error(String),  // actual error with associated string
+    Return(Object), // return statement with associated value
+}
 
 pub trait Reporter {
     fn report(&self, error_msg: &str, positional_msg: &str, pos: &Position) -> String;

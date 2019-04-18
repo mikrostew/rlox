@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::error::LoxErr;
 use crate::interpreter::Object;
 
 #[derive(PartialEq)]
@@ -20,14 +21,14 @@ impl Environment {
         })
     }
 
-    pub fn assign(&self, name: &String, value: Object) -> Result<(), String> {
+    pub fn assign(&self, name: &String, value: Object) -> Result<(), LoxErr> {
         if self.values.borrow().contains_key(name) {
             self.values.borrow_mut().insert(name.to_string(), value);
             Ok(())
         } else {
             match self.enclosing {
                 Some(ref rc_env) => rc_env.assign(name, value),
-                None => Err(format!("Undefined variable `{}`", name)),
+                None => Err(LoxErr::Error(format!("Undefined variable `{}`", name))),
             }
         }
     }
@@ -36,7 +37,7 @@ impl Environment {
         self.values.borrow_mut().insert(name.to_string(), value);
     }
 
-    pub fn get(&self, name: &String) -> Result<Object, String> {
+    pub fn get(&self, name: &String) -> Result<Object, LoxErr> {
         match self.values.borrow().get(&name.to_string()) {
             // if it exists locally, return that
             Some(value) => Ok(value.clone()),
@@ -44,7 +45,7 @@ impl Environment {
                 // otherwise check the enclosing environment for shadowed var
                 match &self.enclosing {
                     Some(env) => env.get(name),
-                    None => Err(format!("Undefined variable `{}`", name)),
+                    None => Err(LoxErr::Error(format!("Undefined variable `{}`", name))),
                 }
             }
         }

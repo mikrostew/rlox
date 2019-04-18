@@ -16,18 +16,9 @@ pub enum Stmt {
     Function(String, Vec<String>, Box<Stmt>), // name, params, body
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>), // if expr then stmt (else stmt)?
     Print(Box<Expr>),
+    Return(Box<Expr>),
     Var(String, Box<Expr>),      // name, initializer
     While(Box<Expr>, Box<Stmt>), // condition, body
-}
-
-impl Stmt {
-    pub fn accept<T>(
-        &self,
-        visitor: &mut impl Visitor<T>,
-        env: &Rc<Environment>,
-    ) -> Result<T, String> {
-        visitor.visit_stmt(self, env)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,14 +34,6 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn accept<T>(
-        &self,
-        visitor: &mut impl Visitor<T>,
-        env: &Rc<Environment>,
-    ) -> Result<T, String> {
-        visitor.visit_expr(self, env)
-    }
-
     pub fn position(&self) -> Position {
         match self {
             Expr::Assign(p, _, _) => p,
@@ -140,16 +123,13 @@ pub enum Literal {
     String(String),
 }
 
-impl Literal {
-    pub fn accept<T>(&self, visitor: &impl Visitor<T>, env: &Rc<Environment>) -> Result<T, String> {
-        visitor.visit_literal(self, env)
-    }
-}
-
 pub trait Visitor<T> {
-    fn visit_stmt(&mut self, e: &Stmt, env: &Rc<Environment>) -> Result<T, String>;
-    fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<T, String>;
-    fn visit_literal(&self, l: &Literal, env: &Rc<Environment>) -> Result<T, String>;
+    // to support errors or return statements that unwind the call stack
+    type Error;
+
+    fn visit_stmt(&mut self, e: &Stmt, env: &Rc<Environment>) -> Result<T, Self::Error>;
+    fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<T, Self::Error>;
+    fn visit_literal(&self, l: &Literal, env: &Rc<Environment>) -> Result<T, Self::Error>;
 }
 
 // actually use the visitor pattern to sort-of pretty-print the AST
@@ -164,13 +144,15 @@ impl AstPrinter {
         let mut ret_string = String::new();
         let environment = Environment::new(None);
         for s in statements {
-            ret_string += &s.accept(self, &environment)?;
+            ret_string += &self.visit_stmt(s, &environment)?;
         }
         Ok(ret_string)
     }
 }
 
 impl Visitor<String> for AstPrinter {
+    type Error = String;
+
     fn visit_stmt(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match stmt {
             Stmt::Block(statements) => {
@@ -179,38 +161,41 @@ impl Visitor<String> for AstPrinter {
                 } else {
                     let mut formatted_stmts = String::new();
                     for statement in statements {
-                        formatted_stmts.push_str(&statement.accept(self, env)?);
+                        formatted_stmts.push_str(&self.visit_stmt(statement, env)?);
                     }
                     format!("{{\n{}}}\n", formatted_stmts)
                 }
             }
-            Stmt::Expression(ref expr) => format!("{};\n", expr.accept(self, env)?),
+            Stmt::Expression(ref expr) => format!("{};\n", self.visit_expr(expr, env)?),
             Stmt::Function(name, params, body) => {
                 let formatted_params = params.join(", ");
-                let formatted_body = body.accept(self, env)?;
+                let formatted_body = self.visit_stmt(body, env)?;
 
                 format!("<fn {}>({}) {}", name, formatted_params, formatted_body)
             }
             Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
                 let mut if_stmt = String::new();
                 if_stmt.push_str("if ");
-                if_stmt.push_str(&if_expr.accept(self, env)?);
+                if_stmt.push_str(&self.visit_expr(if_expr, env)?);
                 if_stmt.push_str("\nthen:\n");
-                if_stmt.push_str(&then_stmt.accept(self, env)?);
+                if_stmt.push_str(&self.visit_stmt(then_stmt, env)?);
                 if let Some(ref else_stmt) = opt_else_stmt {
                     if_stmt.push_str("else:\n");
-                    if_stmt.push_str(&else_stmt.accept(self, env)?);
+                    if_stmt.push_str(&self.visit_stmt(else_stmt, env)?);
                 } else {
                     if_stmt.push_str("(no else)\n");
                 }
                 if_stmt
             }
-            Stmt::Print(ref expr) => format!("print {};\n", expr.accept(self, env)?),
-            Stmt::Var(name, ref expr) => format!("var {} = {};\n", name, expr.accept(self, env)?),
+            Stmt::Print(ref expr) => format!("print {};\n", self.visit_expr(expr, env)?),
+            Stmt::Return(ref expr) => format!("return {};\n", self.visit_expr(expr, env)?),
+            Stmt::Var(name, ref expr) => {
+                format!("var {} = {};\n", name, self.visit_expr(expr, env)?)
+            }
             Stmt::While(ref condition, ref body) => format!(
                 "while ( {} ) {}",
-                condition.accept(self, env)?,
-                body.accept(self, env)?
+                self.visit_expr(condition, env)?,
+                self.visit_stmt(body, env)?
             ),
         })
     }
@@ -218,35 +203,35 @@ impl Visitor<String> for AstPrinter {
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match e {
             Expr::Assign(_pos, var_name, ref expr) => {
-                format!("{} = {}", var_name, expr.accept(self, env)?,)
+                format!("{} = {}", var_name, self.visit_expr(expr, env)?,)
             }
             Expr::Binary(_pos, ref expr1, token, ref expr2) => format!(
                 "({} {} {})",
-                expr1.accept(self, env)?,
+                self.visit_expr(expr1, env)?,
                 token,
-                expr2.accept(self, env)?
+                self.visit_expr(expr2, env)?
             ),
             Expr::Call(_pos, ref callee_expr, args) => {
                 // TODO: join a vec of strings with commas
                 let arg_string = args
                     .into_iter()
-                    .map(|a| match a.accept(self, env) {
+                    .map(|a| match self.visit_expr(a, env) {
                         Ok(s) => s,
                         Err(e) => format!("Error: {}", e),
                     })
                     .collect::<Vec<String>>()
                     .join(", ");
-                format!("{}({})", callee_expr.accept(self, env)?, arg_string)
+                format!("{}({})", self.visit_expr(callee_expr, env)?, arg_string)
             }
-            Expr::Grouping(_pos, ref expr) => format!("({})", expr.accept(self, env)?),
-            Expr::Literal(_pos, lit) => lit.accept(self, env)?,
+            Expr::Grouping(_pos, ref expr) => format!("({})", self.visit_expr(expr, env)?),
+            Expr::Literal(_pos, lit) => self.visit_literal(lit, env)?,
             Expr::Logical(_pos, ref expr1, op, ref expr2) => format!(
                 "({} {} {})",
-                expr1.accept(self, env)?,
+                self.visit_expr(expr1, env)?,
                 op,
-                expr2.accept(self, env)?
+                self.visit_expr(expr2, env)?
             ),
-            Expr::Unary(_pos, op, ref expr) => format!("({} {})", op, expr.accept(self, env)?),
+            Expr::Unary(_pos, op, ref expr) => format!("({} {})", op, self.visit_expr(expr, env)?),
             Expr::Variable(_pos, name) => format!("{}", name),
         })
     }

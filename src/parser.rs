@@ -83,6 +83,7 @@ impl fmt::Display for FunKind {
 //                | for_stmt
 //                | if_stmt
 //                | print_stmt
+//                | return_stmt
 //                | while_stmt
 //                | block ;
 //
@@ -97,6 +98,8 @@ impl fmt::Display for FunKind {
 // if_stmt        → "if" "(" expression ")" statement ( "else" statement )? ;
 //
 // print_stmt     → "print" expression ";" ;
+//
+// return_stmt    → "return" expression? ";" ;
 //
 // while_stmt     → "while" "(" expression ")" statement ;
 //
@@ -331,6 +334,13 @@ impl Parser {
                     tokens.next();
                     Ok(Some(self.print_statement(tokens)?))
                 }
+                TokenKind::Return => {
+                    // save the position of the return keyword, for err reporting
+                    let ret_pos = token.position.clone();
+                    // consume the token and parse the return statement
+                    tokens.next();
+                    Ok(Some(self.return_statement(ret_pos, tokens)?))
+                }
                 TokenKind::While => {
                     // consume the token and parse the while statement
                     tokens.next();
@@ -492,6 +502,34 @@ impl Parser {
             "expected `;` at end of statement",
         )?;
         Ok(Stmt::Print(Box::new(value)))
+    }
+
+    // return_stmt → "return" expression? ";" ;
+    fn return_statement(
+        &self,
+        ret_pos: Position,
+        tokens: &mut Peekable<Iter<Token>>,
+    ) -> Result<Stmt, String> {
+        let mut value = Expr::Literal(ret_pos, Literal::Nil);
+
+        if let Some(token) = tokens.peek() {
+            match token.kind {
+                // if there is no return expression, leave the value as nil
+                TokenKind::Semicolon => (),
+                _ => {
+                    // for anything else, parse the expression
+                    value = self.expression(tokens)?;
+                }
+            }
+        }
+
+        self.consume_or_err(
+            tokens,
+            TokenKind::Semicolon,
+            "expected `;` after return value",
+        )?;
+
+        Ok(Stmt::Return(Box::new(value)))
     }
 
     // while_stmt → "while" "(" expression ")" statement ;
