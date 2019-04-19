@@ -23,27 +23,27 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Assign(Position, String, Box<Expr>), // name, value
+    Assign(Position, String, Box<Expr>, Option<usize>), // pos, name, value, resolved var distance
     Binary(Position, Box<Expr>, BinaryOp, Box<Expr>),
-    Call(Position, Box<Expr>, Vec<Box<Expr>>), // callee (thing being called), arguments
+    Call(Position, Box<Expr>, Vec<Box<Expr>>), // pos, callee (thing being called), arguments
     Grouping(Position, Box<Expr>),
     Literal(Position, Literal),
     Logical(Position, Box<Expr>, LogicalOp, Box<Expr>),
     Unary(Position, UnaryOp, Box<Expr>),
-    Variable(Position, String), // name
+    Variable(Position, String, Option<usize>), // pos, name, resolved var distance
 }
 
 impl Expr {
     pub fn position(&self) -> Position {
         match self {
-            Expr::Assign(p, _, _) => p,
+            Expr::Assign(p, _, _, _) => p,
             Expr::Binary(p, _, _, _) => p,
             Expr::Call(p, _, _) => p,
             Expr::Grouping(p, _) => p,
             Expr::Literal(p, _) => p,
             Expr::Logical(p, _, _, _) => p,
             Expr::Unary(p, _, _) => p,
-            Expr::Variable(p, _) => p,
+            Expr::Variable(p, _, _) => p,
         }
         .clone()
     }
@@ -127,8 +127,18 @@ pub trait Visitor<T> {
     // to support errors or return statements that unwind the call stack
     type Error;
 
-    fn visit_stmt(&mut self, e: &Stmt, env: &Rc<Environment>) -> Result<T, Self::Error>;
+    fn visit_stmt(&mut self, s: &Stmt, env: &Rc<Environment>) -> Result<T, Self::Error>;
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<T, Self::Error>;
+    fn visit_literal(&self, l: &Literal, env: &Rc<Environment>) -> Result<T, Self::Error>;
+}
+
+// for things that need to modify the AST when visiting
+pub trait VisitorMut<T> {
+    // to support errors or return statements that unwind the call stack
+    type Error;
+
+    fn visit_stmt(&mut self, s: &mut Stmt, env: &Rc<Environment>) -> Result<T, Self::Error>;
+    fn visit_expr(&mut self, e: &mut Expr, env: &Rc<Environment>) -> Result<T, Self::Error>;
     fn visit_literal(&self, l: &Literal, env: &Rc<Environment>) -> Result<T, Self::Error>;
 }
 
@@ -153,8 +163,8 @@ impl AstPrinter {
 impl Visitor<String> for AstPrinter {
     type Error = String;
 
-    fn visit_stmt(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<String, String> {
-        Ok(match stmt {
+    fn visit_stmt(&mut self, s: &Stmt, env: &Rc<Environment>) -> Result<String, String> {
+        Ok(match s {
             Stmt::Block(statements) => {
                 if statements.len() == 0 {
                     "{}".to_string()
@@ -202,9 +212,12 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<String, String> {
         Ok(match e {
-            Expr::Assign(_pos, var_name, ref expr) => {
-                format!("{} = {}", var_name, self.visit_expr(expr, env)?,)
-            }
+            Expr::Assign(_pos, var_name, ref expr, opt_dist) => format!(
+                "{} <dist {:?}> = {}",
+                var_name,
+                opt_dist,
+                self.visit_expr(expr, env)?
+            ),
             Expr::Binary(_pos, ref expr1, token, ref expr2) => format!(
                 "({} {} {})",
                 self.visit_expr(expr1, env)?,
@@ -232,7 +245,7 @@ impl Visitor<String> for AstPrinter {
                 self.visit_expr(expr2, env)?
             ),
             Expr::Unary(_pos, op, ref expr) => format!("({} {})", op, self.visit_expr(expr, env)?),
-            Expr::Variable(_pos, name) => format!("{}", name),
+            Expr::Variable(_pos, name, opt_dist) => format!("{}<dist {:?}>", name, opt_dist),
         })
     }
 

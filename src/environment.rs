@@ -50,4 +50,44 @@ impl Environment {
             }
         }
     }
+
+    // get the var in the enclosing env which is the input distance from this one
+    pub fn get_at(&self, dist: &usize, name: &str) -> Result<Object, LoxErr> {
+        // the book uses an ancestor() method, but I can't figure out how to make that work,
+        // (the borrow checker has defeated me)
+        // so whatever, just doing it with more duplication of code like so
+        let mut env = self;
+        for _i in 0..*dist {
+            match env.enclosing {
+                Some(ref e) => {
+                    env = e;
+                }
+                None => {
+                    return Err(LoxErr::Error(
+                        "oh no! error in static analysis!!".to_string(),
+                    ));
+                }
+            }
+        }
+        env.get(&name.to_string())
+    }
+
+    // assign the var in the enclosing env which is the input distance from this one
+    pub fn assign_at(&self, dist: &usize, name: &str, value: Object) -> Result<(), LoxErr> {
+        // (same note as get_at())
+        let mut env = self;
+        for _i in 0..*dist {
+            match env.enclosing {
+                Some(ref e) => {
+                    env = e;
+                }
+                None => {
+                    return Err(LoxErr::Error(
+                        "oh no! error in static analysis!!".to_string(),
+                    ));
+                }
+            }
+        }
+        env.assign(&name.to_string(), value)
+    }
 }

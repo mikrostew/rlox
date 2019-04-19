@@ -167,38 +167,39 @@ impl LoxNativeFunction {
     }
 }
 
+// global functions
+
+// clock() - get time since epoch in seconds (with ms after the decimal)
+fn clock_fn(_args: Vec<Object>) -> Result<Object, LoxErr> {
+    let now = SystemTime::now();
+    let time_since_epoch = now
+        .duration_since(UNIX_EPOCH)
+        .expect("failed to get clock time");
+    let time_in_seconds = time_since_epoch.as_millis() as f64 / 1000.0;
+
+    Ok(Object::Number(time_in_seconds))
+}
+
 pub struct Interpreter {
     // top-level environment
-    environment: Rc<Environment>,
+    globals: Rc<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let globals = Environment::new(None);
 
-        // global functions
-
-        // clock() - get time since epoch in seconds (with ms after the decimal)
-        fn clock_fn(_args: Vec<Object>) -> Result<Object, LoxErr> {
-            let now = SystemTime::now();
-            let time_since_epoch = now
-                .duration_since(UNIX_EPOCH)
-                .expect("failed to get clock time");
-            let time_in_seconds = time_since_epoch.as_millis() as f64 / 1000.0;
-
-            Ok(Object::Number(time_in_seconds))
-        }
+        // define global functions
         let clock = LoxNativeFunction::new("clock".to_string(), Vec::new(), clock_fn);
         globals.define(&"clock".to_string(), Object::NativeFunction(clock));
 
-        Interpreter {
-            environment: globals,
-        }
+        Interpreter { globals }
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), String> {
         for stmt in statements {
-            match self.execute(&stmt, &self.environment.clone()) {
+            // because globals is Rc<>, clone produces a new pointer to the same heap data
+            match self.execute(&stmt, &self.globals.clone()) {
                 Ok(_) => (),
                 Err(LoxErr::Error(e)) => {
                     eprintln!("Runtime Error:");
@@ -246,8 +247,8 @@ fn add_or_concat(left: Object, right: Object, pos: &Position) -> Result<Object, 
 impl Visitor<Object> for Interpreter {
     type Error = LoxErr;
 
-    fn visit_stmt<'a>(&mut self, stmt: &Stmt, env: &Rc<Environment>) -> Result<Object, LoxErr> {
-        match stmt {
+    fn visit_stmt<'a>(&mut self, s: &Stmt, env: &Rc<Environment>) -> Result<Object, LoxErr> {
+        match s {
             Stmt::Block(statements) => {
                 // new environment for this block
                 let block_env = Environment::new(Some(env.clone()));
@@ -302,11 +303,19 @@ impl Visitor<Object> for Interpreter {
 
     fn visit_expr(&mut self, e: &Expr, env: &Rc<Environment>) -> Result<Object, LoxErr> {
         match e {
-            Expr::Assign(_pos, var_name, ref expr) => {
+            Expr::Assign(_pos, var_name, ref expr, resolved_dist) => {
                 // variable assignment
                 // evaluate the value and assign to the variable, returning the value
                 let value = self.evaluate(expr, env)?;
-                env.assign(var_name, value.clone())?;
+
+                // trust the static analysis did its job
+                match resolved_dist {
+                    // the resolver only resolves local vars,
+                    // so if that is the case use the resolved dist to look it up
+                    Some(dist) => env.assign_at(dist, var_name, value.clone())?,
+                    // otherwise it is a global
+                    None => self.globals.assign(var_name, value.clone())?,
+                }
                 Ok(value)
             }
             Expr::Binary(_pos, ref expr1, op, ref expr2) => {
@@ -390,7 +399,13 @@ impl Visitor<Object> for Interpreter {
                     UnaryOp::Bang(_) => Object::Bool(!right.is_truthy()),
                 })
             }
-            Expr::Variable(_pos, name) => env.get(name),
+            Expr::Variable(_pos, name, resolved_dist) => match resolved_dist {
+                // the resolver only resolves local vars,
+                // so if that is the case use the resolved dist to look it up
+                Some(dist) => env.get_at(dist, name),
+                // otherwise it is a global
+                None => self.globals.get(name),
+            },
         }
     }
 

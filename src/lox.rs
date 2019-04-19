@@ -7,6 +7,7 @@ use crate::ast::AstPrinter;
 use crate::error;
 use crate::interpreter::Interpreter;
 use crate::parser::Parser;
+use crate::resolver::Resolver;
 use crate::scanner::Scanner;
 
 pub struct Lox {}
@@ -87,8 +88,8 @@ impl Lox {
         println!("```");
         println!("");
 
-        // TODO: creating 2 reporters here, but not sure how else to do this at the moment
-        // (because they would share the same string on the heap, which doesn't work)
+        // TODO: creating 3 reporters here, which I shouldn't need to do
+        // (could probably use Rc to fix this...)
         let err_reporter1 = error::BetterReporter::new(source.to_string());
         let scanner = Scanner::new(file.clone(), source.to_string(), err_reporter1);
         let tokens = scanner.scan_tokens()?;
@@ -102,7 +103,11 @@ impl Lox {
 
         let err_reporter2 = error::BetterReporter::new(source.to_string());
         let parser = Parser::new(file.clone(), tokens, err_reporter2);
-        let statements = parser.parse()?;
+        let mut statements = parser.parse()?;
+
+        let err_reporter3 = error::BetterReporter::new(source.to_string());
+        let mut resolver = Resolver::new(err_reporter3);
+        resolver.resolve(&mut statements)?;
 
         // TODO: add this as a command line option (--show-ast or --debug-ast)
         let mut ast_printer = AstPrinter::new();

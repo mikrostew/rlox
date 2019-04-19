@@ -615,9 +615,14 @@ impl Parser {
 
                 // check left hand side is valid assignment target
                 match l_value {
-                    Expr::Variable(pos, name) => {
+                    Expr::Variable(pos, name, _dist) => {
                         let expr_pos = Position::from_positions(pos, r_value.position());
-                        return Ok(Expr::Assign(expr_pos, name.clone(), Box::new(r_value)));
+                        return Ok(Expr::Assign(
+                            expr_pos,
+                            name.clone(),
+                            Box::new(r_value),
+                            None,
+                        ));
                     }
                     _ => {
                         let report_string = self.err_reporter.report(
@@ -760,7 +765,9 @@ impl Parser {
                     self.consume_or_err(tokens, TokenKind::CloseParen, "missing closing `)`")?;
                     Expr::Grouping(expr.position(), Box::new(expr))
                 }
-                TokenKind::Identifier(s) => Expr::Variable(token.position.clone(), s.to_string()),
+                TokenKind::Identifier(s) => {
+                    Expr::Variable(token.position.clone(), s.to_string(), None)
+                }
                 _ => {
                     let report_string = self.err_reporter.report(
                         &format!("expected literal or `(`, found `{}`", token),

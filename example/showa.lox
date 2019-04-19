@@ -1,0 +1,12 @@
+// from http://www.craftinginterpreters.com/resolving-and-binding.html#static-scope
+
+var a = "global";
+{
+  fun showA() {
+    print a;
+  }
+
+  showA(); // "global" - ok
+  var a = "block";
+  showA(); // "block" - oops!
+}
