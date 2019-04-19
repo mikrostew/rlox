@@ -6,10 +6,19 @@ use crate::environment::Environment;
 use crate::error::Reporter;
 use crate::token::Position;
 
+#[derive(Clone, PartialEq)]
+pub enum FunctionKind {
+    None,
+    Function,
+    // TODO: add more kinds supposedly...
+}
+
 pub struct Resolver {
     // track what things are currently in scope, for local block scopes
     // (global scope is not tracked)
     scopes: Vec<HashMap<String, bool>>,
+    // track if we are currently in a function, and if so what kind
+    current_fn: FunctionKind,
     // for reporting errors found during this stage
     err_reporter: Box<Reporter>,
     // keep track of errors encountered
@@ -20,6 +29,8 @@ impl Resolver {
     pub fn new<R: Reporter + 'static>(err_reporter: R) -> Self {
         Resolver {
             scopes: Vec::new(),
+            // start out at the top level
+            current_fn: FunctionKind::None,
             err_reporter: Box::new(err_reporter),
             num_errors: 0,
         }
@@ -128,7 +139,13 @@ impl Resolver {
         params: &Vec<Identifier>,
         body: &mut Stmt,
         env: &Rc<Environment>,
+        kind: FunctionKind,
     ) -> Result<(), String> {
+        // use the call stack to save the enclosing function kind,
+        // then set the current one
+        let enclosing_fn = self.current_fn.clone();
+        self.current_fn = kind;
+
         // create a new scope for the function body
         self.begin_scope();
         // bind vars for each of the function parameters
@@ -138,6 +155,8 @@ impl Resolver {
         }
         self.visit_stmt(body, env)?;
         self.end_scope();
+        // back to whatever function may be enclosing this one
+        self.current_fn = enclosing_fn;
         Ok(())
     }
 }
@@ -168,7 +187,7 @@ impl VisitorMut<()> for Resolver {
                 self.define(name);
 
                 // then handle the function body
-                self.resolve_function(params, body, env)?;
+                self.resolve_function(params, body, env, FunctionKind::Function)?;
             }
             Stmt::If(ref mut if_expr, ref mut then_stmt, ref mut opt_else_stmt) => {
                 // resolve the condition and both branches
@@ -182,6 +201,12 @@ impl VisitorMut<()> for Resolver {
                 self.visit_expr(expr, env)?; // resolve the parts
             }
             Stmt::Return(ref mut expr) => {
+                // check that we are actually in a function
+                // TODO: this should probably use the position of the Stmt
+                // (BUT, there is not Position for Stmt, so have to implement that...)
+                if self.current_fn == FunctionKind::None {
+                    self.error(expr.position().clone(), "cannot return from top-level code");
+                }
                 self.visit_expr(expr, env)?; // resolve the parts
             }
             Stmt::Var(name, ref mut expr) => {

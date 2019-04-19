@@ -1,0 +1,3 @@
+// from http://www.craftinginterpreters.com/resolving-and-binding.html#invalid-return-errors
+
+return "at top level";
