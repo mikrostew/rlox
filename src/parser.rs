@@ -2,7 +2,7 @@ use std::fmt;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::ast::{BinaryOp, Expr, Literal, LogicalOp, Stmt, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Identifier, Literal, LogicalOp, Stmt, UnaryOp};
 use crate::error::Reporter;
 use crate::token::{Position, Token, TokenKind};
 
@@ -251,7 +251,7 @@ impl Parser {
                             );
                         }
 
-                        parameters.push(param.to_string());
+                        parameters.push(Identifier::new(param.to_string(), param.position));
                         if let Some(token) = tokens.peek() {
                             match token.kind {
                                 TokenKind::Comma => {
@@ -283,7 +283,11 @@ impl Parser {
 
         let body = self.block_statement(tokens)?;
 
-        Ok(Stmt::Function(name.to_string(), parameters, Box::new(body)))
+        Ok(Stmt::Function(
+            Identifier::new(name.to_string(), name.position),
+            parameters,
+            Box::new(body),
+        ))
     }
 
     // var_decl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -311,7 +315,10 @@ impl Parser {
             "expected `;` after variable declaration",
         )?;
 
-        Ok(Stmt::Var(name.to_string(), Box::new(initializer)))
+        Ok(Stmt::Var(
+            Identifier::new(name.to_string(), name.position),
+            Box::new(initializer),
+        ))
     }
 
     // statement → expr_stmt | for_stmt | if_stmt | print_stmt | while_stmt | block ;

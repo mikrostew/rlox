@@ -257,11 +257,15 @@ impl Visitor<Object> for Interpreter {
             Stmt::Expression(ref expr) => {
                 self.evaluate(expr, env)?;
             }
-            Stmt::Function(name, params, ref body) => {
+            Stmt::Function(ident, params, ref body) => {
                 // when defining the function, capture the current env to close over vars
+                let param_strings = params
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect::<Vec<String>>();
                 let lox_function =
-                    LoxFunction::new(name.clone(), params.to_owned(), body.to_owned(), env);
-                env.define(name, Object::Function(lox_function));
+                    LoxFunction::new(ident.name.clone(), param_strings, body.to_owned(), env);
+                env.define(&ident.name, Object::Function(lox_function));
             }
             Stmt::If(ref if_expr, ref then_stmt, ref opt_else_stmt) => {
                 let condition = self.evaluate(if_expr, env)?;
@@ -286,11 +290,11 @@ impl Visitor<Object> for Interpreter {
                 // it can actually be returned
                 return Err(LoxErr::Return(value));
             }
-            Stmt::Var(name, ref expr) => {
+            Stmt::Var(ident, ref expr) => {
                 // variable declaration
                 // evaluate the value and assign to the new variable
                 let value = self.evaluate(expr, env)?;
-                env.define(name, value);
+                env.define(&ident.name, value);
             }
             Stmt::While(ref condition, ref body) => {
                 while self.evaluate(condition, env)?.is_truthy() {

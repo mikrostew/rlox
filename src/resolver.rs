@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{Expr, Literal, Stmt, VisitorMut};
+use crate::ast::{Expr, Identifier, Literal, Stmt, VisitorMut};
 use crate::environment::Environment;
 use crate::error::Reporter;
 use crate::token::Position;
@@ -62,27 +62,36 @@ impl Resolver {
     }
 
     // declare a variable in the current scope
-    pub fn declare(&mut self, name: &str) {
+    pub fn declare(&mut self, ident: &Identifier) {
         // try to access the top element of the stack
         match self.scopes.last_mut() {
             // if empty, do nothing (don't worry about global vars)
             None => (),
             Some(scope) => {
-                // mark that the var exists, but is not yet initialized
-                scope.insert(name.to_string(), false);
+                // check if this has already been declared
+                if scope.contains_key(&ident.name.to_string()) {
+                    // report the error, but don't return it
+                    self.error(
+                        ident.pos.clone(),
+                        &format!("variable `{}` re-declared in local scope", ident.name),
+                    );
+                } else {
+                    // mark that the var exists, but is not yet initialized
+                    scope.insert(ident.name.to_string(), false);
+                }
             }
         }
     }
 
     // define a variable in the current scope
-    pub fn define(&mut self, name: &str) {
+    pub fn define(&mut self, ident: &Identifier) {
         // try to access the top element of the stack
         match self.scopes.last_mut() {
             // if empty, do nothing (don't worry about global vars)
             None => (),
             Some(scope) => {
                 // mark that the var exists, and is now initialized
-                scope.insert(name.to_string(), true);
+                scope.insert(ident.name.to_string(), true);
             }
         }
     }
@@ -116,7 +125,7 @@ impl Resolver {
 
     pub fn resolve_function(
         &mut self,
-        params: &Vec<String>,
+        params: &Vec<Identifier>,
         body: &mut Stmt,
         env: &Rc<Environment>,
     ) -> Result<(), String> {

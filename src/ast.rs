@@ -9,15 +9,34 @@ use crate::token::Position;
 // for some ideas on visitor pattern in Rust, see:
 // https://github.com/rust-unofficial/patterns/blob/master/patterns/visitor.md
 
+// because I need position along with the name (for err reporting)
+#[derive(Clone, Debug, PartialEq)]
+pub struct Identifier {
+    pub name: String,
+    pub pos: Position,
+}
+
+impl Identifier {
+    pub fn new(name: String, pos: Position) -> Self {
+        Identifier { name, pos }
+    }
+}
+
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Block(Vec<Stmt>),
     Expression(Box<Expr>),
-    Function(String, Vec<String>, Box<Stmt>), // name, params, body
-    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>), // if expr then stmt (else stmt)?
+    Function(Identifier, Vec<Identifier>, Box<Stmt>), // name, params, body
+    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),      // if expr then stmt (else stmt)?
     Print(Box<Expr>),
     Return(Box<Expr>),
-    Var(String, Box<Expr>),      // name, initializer
+    Var(Identifier, Box<Expr>),  // name, initializer
     While(Box<Expr>, Box<Stmt>), // condition, body
 }
 
@@ -178,7 +197,11 @@ impl Visitor<String> for AstPrinter {
             }
             Stmt::Expression(ref expr) => format!("{};\n", self.visit_expr(expr, env)?),
             Stmt::Function(name, params, body) => {
-                let formatted_params = params.join(", ");
+                let formatted_params: String = params
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect::<Vec<String>>()
+                    .join(", ");
                 let formatted_body = self.visit_stmt(body, env)?;
 
                 format!("<fn {}>({}) {}", name, formatted_params, formatted_body)
